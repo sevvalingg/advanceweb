@@ -8,9 +8,12 @@ import {
   createDataFrame,
   FieldType,
 } from '@grafana/data';
-
-import { MyQuery, MyDataSourceOptions, DEFAULT_QUERY, DataSourceResponse } from './types';
 import { lastValueFrom } from 'rxjs';
+
+import { MyQuery, MyDataSourceOptions, DEFAULT_QUERY, DataSourceResponse, TOPICS } from './types';
+import { generateSeries } from './mock/telemetry';
+
+const MIN_STEP_MS = 50;
 
 export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
   baseUrl: string;
@@ -25,22 +28,32 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
   }
 
   filterQuery(query: MyQuery): boolean {
-    // if no query has been provided, prevent the query from being executed
-    return !!query.queryText;
+    return !query.hide && !!query.topic;
   }
 
   async query(options: DataQueryRequest<MyQuery>): Promise<DataQueryResponse> {
-    const { range } = options;
-    const from = range!.from.valueOf();
-    const to = range!.to.valueOf();
+    const from = options.range.from.valueOf();
+    const to = options.range.to.valueOf();
+    const maxPoints = options.maxDataPoints ?? 1000;
+    const minStepForRange = Math.ceil((to - from) / maxPoints);
 
-    // Return a constant for each query.
     const data = options.targets.map((target) => {
+      const topic = target.topic ?? 'speed';
+      const meta = TOPICS[topic];
+      const step = Math.max(target.intervalMs ?? options.intervalMs, minStepForRange, MIN_STEP_MS);
+      const { times, values } = generateSeries(topic, from, to, step);
+
       return createDataFrame({
         refId: target.refId,
+        name: meta.label,
         fields: [
-          { name: 'Time', values: [from, to], type: FieldType.time },
-          { name: 'Value', values: [target.constant, target.constant], type: FieldType.number },
+          { name: 'Time', type: FieldType.time, values: times },
+          {
+            name: meta.label,
+            type: FieldType.number,
+            values,
+            config: { unit: meta.unit, displayName: meta.label },
+          },
         ],
       });
     });
@@ -56,38 +69,22 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
   }
 
   /**
-   * Checks whether we can connect to the API.
+   * Mock mode needs no connection; the REST/WebSocket check will be added with the mock server.
    */
   async testDatasource() {
-    const defaultErrorMessage = 'Cannot connect to API';
-
     try {
-      const response = await this.request('/health');
-      if (response.status === 200) {
-        return {
-          status: 'success',
-          message: 'Success',
-        };
-      } else {
-        return {
-          status: 'error',
-          message: response.statusText ? response.statusText : defaultErrorMessage,
-        };
-      }
+      return {
+        status: 'success',
+        message: 'AutoTrack telemetry is ready (mock mode: data is generated in the browser).',
+      };
     } catch (err) {
-      let message = '';
+      let message = 'Cannot connect to API';
       if (typeof err === 'string') {
         message = err;
       } else if (isFetchError(err)) {
-        message = 'Fetch error: ' + (err.statusText ? err.statusText : defaultErrorMessage);
-        if (err.data && err.data.error && err.data.error.code) {
-          message += ': ' + err.data.error.code + '. ' + err.data.error.message;
-        }
+        message = 'Fetch error: ' + (err.statusText || message);
       }
-      return {
-        status: 'error',
-        message,
-      };
+      return { status: 'error', message };
     }
   }
 }
