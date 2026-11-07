@@ -4,11 +4,10 @@ datasources:
   - name: 'telemetry'
     type: 'autotrack-telemetry-datasource'
     access: proxy
-    isDefault: false
+    isDefault: true
     orgId: 1
     version: 1
     editable: true
     jsonData:
-      path: '/resources'
-    secureJsonData:
-      apiKey: 'api-key'
+      mode: server
+      serverUrl: http://localhost:8080

@@ -1,72 +1,44 @@
 import React, { ChangeEvent } from 'react';
-import { InlineField, Input, SecretInput } from '@grafana/ui';
-import { DataSourcePluginOptionsEditorProps } from '@grafana/data';
-import { MyDataSourceOptions, MySecureJsonData } from '../types';
+import { InlineField, Input, RadioButtonGroup } from '@grafana/ui';
+import { DataSourcePluginOptionsEditorProps, SelectableValue } from '@grafana/data';
+import { DEFAULT_SERVER_URL, MyDataSourceOptions, SourceMode } from '../types';
 
-interface Props extends DataSourcePluginOptionsEditorProps<MyDataSourceOptions, MySecureJsonData> {}
+type Props = DataSourcePluginOptionsEditorProps<MyDataSourceOptions>;
 
-export function ConfigEditor(props: Props) {
-  const { onOptionsChange, options } = props;
-  const { jsonData, secureJsonFields, secureJsonData } = options;
+const modeOptions: Array<SelectableValue<SourceMode>> = [
+  { label: 'Mock (browser)', value: 'mock', description: 'Synthetic signals generated in the browser' },
+  { label: 'AutoTrack server', value: 'server', description: 'Recorded runs served over REST' },
+];
 
-  const onPathChange = (event: ChangeEvent<HTMLInputElement>) => {
-    onOptionsChange({
-      ...options,
-      jsonData: {
-        ...jsonData,
-        path: event.target.value,
-      },
-    });
-  };
+export function ConfigEditor({ options, onOptionsChange }: Props) {
+  const { jsonData } = options;
+  const mode = jsonData.mode ?? 'mock';
 
-  // Secure field (only sent to the backend)
-  const onAPIKeyChange = (event: ChangeEvent<HTMLInputElement>) => {
-    onOptionsChange({
-      ...options,
-      secureJsonData: {
-        apiKey: event.target.value,
-      },
-    });
-  };
-
-  const onResetAPIKey = () => {
-    onOptionsChange({
-      ...options,
-      secureJsonFields: {
-        ...options.secureJsonFields,
-        apiKey: false,
-      },
-      secureJsonData: {
-        ...options.secureJsonData,
-        apiKey: '',
-      },
-    });
+  const update = (patch: Partial<MyDataSourceOptions>) => {
+    onOptionsChange({ ...options, jsonData: { ...jsonData, ...patch } });
   };
 
   return (
     <>
       <p style={{ opacity: 0.7 }}>Developed by Meryem Esma Eröz · AutoTrack AI · Fall 2026</p>
-      <InlineField label="Path" labelWidth={14} interactive tooltip={'Json field returned to frontend'}>
-        <Input
-          id="config-editor-path"
-          onChange={onPathChange}
-          value={jsonData.path}
-          placeholder="Enter the path, e.g. /api/v1"
-          width={40}
-        />
+      <InlineField label="Mode" labelWidth={14} tooltip="Where the telemetry comes from">
+        <RadioButtonGroup options={modeOptions} value={mode} onChange={(value) => update({ mode: value })} />
       </InlineField>
-      <InlineField label="API Key" labelWidth={14} interactive tooltip={'Secure json field (backend only)'}>
-        <SecretInput
-          required
-          id="config-editor-api-key"
-          isConfigured={secureJsonFields.apiKey}
-          value={secureJsonData?.apiKey}
-          placeholder="Enter your API key"
-          width={40}
-          onReset={onResetAPIKey}
-          onChange={onAPIKeyChange}
-        />
-      </InlineField>
+      {mode === 'server' && (
+        <InlineField
+          label="Server URL"
+          labelWidth={14}
+          interactive
+          tooltip="Address of the AutoTrack mock server as seen from your browser"
+        >
+          <Input
+            width={40}
+            value={jsonData.serverUrl ?? ''}
+            placeholder={DEFAULT_SERVER_URL}
+            onChange={(event: ChangeEvent<HTMLInputElement>) => update({ serverUrl: event.target.value })}
+          />
+        </InlineField>
+      )}
     </>
   );
 }

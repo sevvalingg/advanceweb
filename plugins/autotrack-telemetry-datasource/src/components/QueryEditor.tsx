@@ -1,21 +1,36 @@
-import React, { ChangeEvent } from 'react';
-import { InlineField, Input, Select, Stack } from '@grafana/ui';
+import React, { ChangeEvent, useEffect, useState } from 'react';
+import { Alert, InlineField, Input, Select, Stack } from '@grafana/ui';
 import { QueryEditorProps, SelectableValue } from '@grafana/data';
 import { DataSource } from '../datasource';
-import { MyDataSourceOptions, MyQuery, TelemetryTopic, TOPICS } from '../types';
+import { MyDataSourceOptions, MyQuery } from '../types';
 
 type Props = QueryEditorProps<DataSource, MyQuery, MyDataSourceOptions>;
 
-const topicOptions: Array<SelectableValue<TelemetryTopic>> = (Object.keys(TOPICS) as TelemetryTopic[]).map(
-  (key) => ({
-    value: key,
-    label: TOPICS[key].label,
-    description: TOPICS[key].description,
-  })
-);
+export function QueryEditor({ query, onChange, onRunQuery, datasource }: Props) {
+  const [topicOptions, setTopicOptions] = useState<Array<SelectableValue<string>>>([]);
+  const [loadError, setLoadError] = useState<string>();
 
-export function QueryEditor({ query, onChange, onRunQuery }: Props) {
-  const onTopicChange = (option: SelectableValue<TelemetryTopic>) => {
+  useEffect(() => {
+    let cancelled = false;
+    datasource
+      .listTopics()
+      .then((topics) => {
+        if (!cancelled) {
+          setTopicOptions(topics.map((t) => ({ value: t.id, label: t.label })));
+          setLoadError(undefined);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!cancelled) {
+          setLoadError(err instanceof Error ? err.message : String(err));
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [datasource]);
+
+  const onTopicChange = (option: SelectableValue<string>) => {
     if (!option.value) {
       return;
     }
@@ -31,22 +46,35 @@ export function QueryEditor({ query, onChange, onRunQuery }: Props) {
   return (
     <>
       <p style={{ opacity: 0.7 }}>Developed by Meryem Esma Eröz · AutoTrack AI · Fall 2026</p>
+      {loadError && (
+        <Alert title="Could not load topics" severity="error">
+          {loadError}
+        </Alert>
+      )}
       <Stack gap={1}>
         <InlineField label="Topic" labelWidth={10} tooltip="Which vehicle signal to query">
-          <Select options={topicOptions} value={query.topic} onChange={onTopicChange} width={30} />
-        </InlineField>
-        <InlineField label="Interval (ms)" labelWidth={16} tooltip="Sampling interval; leave empty for automatic">
-          <Input
-            type="number"
-            min={50}
-            step={50}
-            value={query.intervalMs ?? ''}
-            placeholder="auto"
-            onChange={onIntervalChange}
-            onBlur={onRunQuery}
-            width={12}
+          <Select
+            options={topicOptions}
+            value={query.topic}
+            onChange={onTopicChange}
+            isLoading={!topicOptions.length && !loadError}
+            width={30}
           />
         </InlineField>
+        {datasource.mode === 'mock' && (
+          <InlineField label="Interval (ms)" labelWidth={16} tooltip="Sampling interval; leave empty for automatic">
+            <Input
+              type="number"
+              min={50}
+              step={50}
+              value={query.intervalMs ?? ''}
+              placeholder="auto"
+              onChange={onIntervalChange}
+              onBlur={onRunQuery}
+              width={12}
+            />
+          </InlineField>
+        )}
       </Stack>
     </>
   );

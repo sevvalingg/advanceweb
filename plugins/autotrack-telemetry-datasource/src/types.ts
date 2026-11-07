@@ -1,6 +1,12 @@
 import { DataSourceJsonData } from '@grafana/data';
 import { DataQuery } from '@grafana/schema';
 
+/** Where the data comes from. */
+export type SourceMode = 'mock' | 'server';
+
+export const DEFAULT_SERVER_URL = 'http://localhost:8080';
+
+/** Synthetic signals generated in the browser (mock mode). */
 export type TelemetryTopic = 'speed' | 'steering' | 'battery_4s' | 'battery_3s';
 
 export interface TopicMeta {
@@ -16,34 +22,30 @@ export const TOPICS: Record<TelemetryTopic, TopicMeta> = {
   battery_3s: { label: 'Battery 3S (Motor)', unit: 'volt', description: '3S pack powering the motor via VESC' },
 };
 
+/** A topic as listed by the AutoTrack server's /topics endpoint. */
+export interface ServerTopic {
+  id: string;
+  label: string;
+  unit: string;
+}
+
+/** Response of the AutoTrack server's /telemetry endpoint. */
+export interface TelemetryResponse {
+  topic: string;
+  label: string;
+  unit: string;
+  points: Array<[number, number]>;
+}
+
 export interface MyQuery extends DataQuery {
-  topic: TelemetryTopic;
+  topic: string;
   intervalMs?: number;
-}
-
-export const DEFAULT_QUERY: Partial<MyQuery> = {
-  topic: 'speed',
-};
-
-export interface DataPoint {
-  Time: number;
-  Value: number;
-}
-
-export interface DataSourceResponse {
-  datapoints: DataPoint[];
 }
 
 /**
  * These are options configured for each DataSource instance
  */
 export interface MyDataSourceOptions extends DataSourceJsonData {
-  path?: string;
-}
-
-/**
- * Value that is used in the backend, but never sent over HTTP to the frontend
- */
-export interface MySecureJsonData {
-  apiKey?: string;
+  mode?: SourceMode;
+  serverUrl?: string;
 }
