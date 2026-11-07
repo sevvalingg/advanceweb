@@ -1,5 +1,5 @@
 import React, { ChangeEvent, useEffect, useState } from 'react';
-import { Alert, InlineField, Input, Select, Stack } from '@grafana/ui';
+import { Alert, InlineField, InlineSwitch, Input, Select, Stack } from '@grafana/ui';
 import { QueryEditorProps, SelectableValue } from '@grafana/data';
 import { DataSource } from '../datasource';
 import { MyDataSourceOptions, MyQuery } from '../types';
@@ -43,6 +43,11 @@ export function QueryEditor({ query, onChange, onRunQuery, datasource }: Props) 
     onChange({ ...query, intervalMs: Number.isNaN(parsed) ? undefined : parsed });
   };
 
+  const onLiveChange = (event: React.FormEvent<HTMLInputElement>) => {
+    onChange({ ...query, live: event.currentTarget.checked });
+    onRunQuery();
+  };
+
   return (
     <>
       <p style={{ opacity: 0.7 }}>Developed by Meryem Esma Eröz · AutoTrack AI · Fall 2026</p>
@@ -61,6 +66,11 @@ export function QueryEditor({ query, onChange, onRunQuery, datasource }: Props) 
             width={30}
           />
         </InlineField>
+        {datasource.mode === 'server' && (
+          <InlineField label="Live" tooltip="Stream new points over a WebSocket instead of polling">
+            <InlineSwitch value={!!query.live} onChange={onLiveChange} />
+          </InlineField>
+        )}
         {datasource.mode === 'mock' && (
           <InlineField label="Interval (ms)" labelWidth={16} tooltip="Sampling interval; leave empty for automatic">
             <Input

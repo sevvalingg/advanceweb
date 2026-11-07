@@ -40,6 +40,14 @@ export interface TelemetryResponse {
 export interface MyQuery extends DataQuery {
   topic: string;
   intervalMs?: number;
+  /** Server mode only: keep the panel updated over a WebSocket. */
+  live?: boolean;
+}
+
+/** Message pushed by the AutoTrack server's /stream WebSocket. */
+export interface StreamMessage {
+  topic: string;
+  points: Array<[number, number]>;
 }
 
 /**

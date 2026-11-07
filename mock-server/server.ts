@@ -2,6 +2,9 @@
  * AutoTrack mock telemetry server.
  * Replays a recorded run (converted from a rosbag) in a loop, aligned to wall-clock time,
  * so Grafana sees it as live data. Also covers AutoTrack SRS FR-28 (replay of recorded runs).
+ *
+ * REST:      GET /health, GET /topics, GET /telemetry?topic=&from=&to=&maxPoints=
+ * WebSocket: GET /stream?topic=   pushes new points as they "happen"
  */
 
 type Point = [number, number];
@@ -21,6 +24,7 @@ interface TopicMeta {
 const PORT = Number(Deno.env.get('PORT') ?? 8080);
 const DATA_FILE = Deno.env.get('DATA_FILE') ?? './data/run_2026-10-20_1735.json';
 const DEFAULT_MAX_POINTS = 2000;
+const STREAM_TICK_MS = 200;
 
 const TOPICS: Record<string, TopicMeta> = {
   speed_cmd: { label: 'Speed command', unit: 'velocityms' },
@@ -47,6 +51,10 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
+function isKnownTopic(topic: string): boolean {
+  return topic in TOPICS && topic in run.series;
+}
+
 /** Repeat the recording back-to-back on the timeline and keep the points inside [from, to]. */
 function replay(points: Point[], from: number, to: number, maxPoints: number): Point[] {
   const out: Point[] = [];
@@ -71,7 +79,7 @@ function handleTelemetry(params: URLSearchParams): Response {
   const to = Number(params.get('to'));
   const maxPoints = Number(params.get('maxPoints') ?? DEFAULT_MAX_POINTS);
 
-  if (!(topic in TOPICS) || !(topic in run.series)) {
+  if (!isKnownTopic(topic)) {
     return json({ error: `Unknown topic '${topic}'`, topics: Object.keys(TOPICS) }, 404);
   }
   if (!Number.isFinite(from) || !Number.isFinite(to) || from > to) {
@@ -83,6 +91,36 @@ function handleTelemetry(params: URLSearchParams): Response {
     ...TOPICS[topic],
     points: replay(run.series[topic], from, to, Math.max(10, maxPoints)),
   });
+}
+
+/** Push every new point of one topic to the client as soon as its replay time is reached. */
+function handleStream(req: Request, params: URLSearchParams): Response {
+  const topic = params.get('topic') ?? '';
+  if (req.headers.get('upgrade')?.toLowerCase() !== 'websocket') {
+    return json({ error: 'This endpoint expects a WebSocket connection' }, 400);
+  }
+  if (!isKnownTopic(topic)) {
+    return json({ error: `Unknown topic '${topic}'`, topics: Object.keys(TOPICS) }, 404);
+  }
+
+  const { socket, response } = Deno.upgradeWebSocket(req);
+  let lastSent = Date.now();
+  let timer: number | undefined;
+
+  socket.onopen = () => {
+    timer = setInterval(() => {
+      const now = Date.now();
+      const points = replay(run.series[topic], lastSent + 1, now, Number.MAX_SAFE_INTEGER);
+      lastSent = now;
+      if (points.length > 0 && socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ topic, points }));
+      }
+    }, STREAM_TICK_MS);
+  };
+  socket.onclose = () => clearInterval(timer);
+  socket.onerror = () => clearInterval(timer);
+
+  return response;
 }
 
 Deno.serve({ port: PORT, hostname: '0.0.0.0' }, (req) => {
@@ -97,6 +135,8 @@ Deno.serve({ port: PORT, hostname: '0.0.0.0' }, (req) => {
       return json(Object.entries(TOPICS).map(([id, meta]) => ({ id, ...meta })));
     case '/telemetry':
       return handleTelemetry(url.searchParams);
+    case '/stream':
+      return handleStream(req, url.searchParams);
     default:
       return json({ error: 'Not found' }, 404);
   }

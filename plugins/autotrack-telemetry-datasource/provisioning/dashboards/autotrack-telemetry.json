@@ -2,92 +2,200 @@
   "uid": "gsrvx2",
   "title": "AutoTrack Telemetry",
   "description": "Real AutoTrack AI run (2026-10-20) replayed by the mock server. Data source plugin by Meryem Esma Eröz, SEN0415 Fall 2026.",
-  "tags": ["autotrack"],
+  "tags": [
+    "autotrack"
+  ],
   "editable": true,
   "schemaVersion": 39,
-  "time": { "from": "now-2m", "to": "now" },
-  "refresh": "5s",
+  "time": {
+    "from": "now-2m",
+    "to": "now"
+  },
+  "refresh": "",
   "panels": [
     {
       "id": 1,
       "type": "timeseries",
       "title": "Speed command",
       "description": "Commanded speed from the joystick (/joy). Never exceeds the 1 m/s software limit (NFR-04).",
-      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
-      "targets": [{ "refId": "A", "topic": "speed_cmd" }],
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "topic": "speed_cmd",
+          "live": true
+        }
+      ],
       "fieldConfig": {
         "defaults": {
           "unit": "velocityms",
           "min": -1,
           "max": 1,
-          "color": { "mode": "palette-classic" },
-          "custom": { "lineInterpolation": "stepAfter", "lineWidth": 2, "fillOpacity": 10 }
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "lineInterpolation": "stepAfter",
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
         },
         "overrides": []
       },
-      "options": { "legend": { "showLegend": false }, "tooltip": { "mode": "single" } }
+      "options": {
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
     },
     {
       "id": 2,
       "type": "timeseries",
       "title": "Steering command",
       "description": "Commanded steering angle from the joystick, ±19.5° at full stick (FR-02).",
-      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
-      "targets": [{ "refId": "A", "topic": "steering_cmd" }],
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "topic": "steering_cmd",
+          "live": true
+        }
+      ],
       "fieldConfig": {
         "defaults": {
           "unit": "degree",
           "min": -20,
           "max": 20,
-          "color": { "mode": "palette-classic" },
-          "custom": { "lineInterpolation": "stepAfter", "lineWidth": 2, "fillOpacity": 10 }
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "lineInterpolation": "stepAfter",
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
         },
         "overrides": []
       },
-      "options": { "legend": { "showLegend": false }, "tooltip": { "mode": "single" } }
+      "options": {
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
     },
     {
       "id": 3,
       "type": "timeseries",
       "title": "Obstacle ahead",
       "description": "Nearest LiDAR return within ±30° of the heading (FR-22). Red below 0.5 m, green above 1 m.",
-      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
-      "targets": [{ "refId": "A", "topic": "obstacle_front" }],
+      "gridPos": {
+        "x": 0,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "topic": "obstacle_front",
+          "live": true
+        }
+      ],
       "fieldConfig": {
         "defaults": {
           "unit": "lengthm",
           "min": 0,
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "orange", "value": 0.5 },
-              { "color": "green", "value": 1 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.5
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
             ]
           },
-          "custom": { "lineWidth": 1, "fillOpacity": 0, "thresholdsStyle": { "mode": "line+area" } }
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 0,
+            "thresholdsStyle": {
+              "mode": "line+area"
+            }
+          }
         },
         "overrides": []
       },
-      "options": { "legend": { "showLegend": false }, "tooltip": { "mode": "single" } }
+      "options": {
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
     },
     {
       "id": 4,
       "type": "state-timeline",
       "title": "Manual control",
       "description": "Deadman button held: the car can only move while this is on (FR-03).",
-      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
-      "targets": [{ "refId": "A", "topic": "manual_active" }],
+      "gridPos": {
+        "x": 12,
+        "y": 8,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "topic": "manual_active",
+          "live": true
+        }
+      ],
       "fieldConfig": {
         "defaults": {
-          "custom": { "fillOpacity": 80, "lineWidth": 0 },
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0
+          },
           "mappings": [
             {
               "type": "value",
               "options": {
-                "0": { "text": "Idle", "color": "dark-gray" },
-                "1": { "text": "Manual (deadman held)", "color": "green" }
+                "0": {
+                  "text": "Idle",
+                  "color": "dark-gray"
+                },
+                "1": {
+                  "text": "Manual (deadman held)",
+                  "color": "green"
+                }
               }
             }
           ]
@@ -99,7 +207,11 @@
         "showValue": "never",
         "rowHeight": 0.8,
         "alignValue": "left",
-        "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom" }
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        }
       }
     },
     {
@@ -107,50 +219,117 @@
       "type": "timeseries",
       "title": "LiDAR scans per second",
       "description": "Scans received per second (RPLidar S1, ~10 Hz expected). Drops to 0 reveal the LiDAR timeouts noted in WP1.",
-      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
-      "targets": [{ "refId": "A", "topic": "lidar_hz" }],
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "topic": "lidar_hz",
+          "live": true
+        }
+      ],
       "fieldConfig": {
         "defaults": {
           "unit": "hertz",
           "min": 0,
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "green", "value": 10 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 10
+              }
             ]
           },
-          "custom": { "drawStyle": "bars", "fillOpacity": 70, "lineWidth": 1, "thresholdsStyle": { "mode": "dashed" } }
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "lineWidth": 1,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
         },
         "overrides": []
       },
-      "options": { "legend": { "showLegend": false }, "tooltip": { "mode": "single" } }
+      "options": {
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
     },
     {
       "id": 6,
       "type": "timeseries",
       "title": "Camera FPS",
       "description": "ZED frames recorded per second vs. the 15 FPS target (NFR-02).",
-      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
-      "targets": [{ "refId": "A", "topic": "camera_fps" }],
+      "gridPos": {
+        "x": 12,
+        "y": 16,
+        "w": 12,
+        "h": 8
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "topic": "camera_fps",
+          "live": true
+        }
+      ],
       "fieldConfig": {
         "defaults": {
           "unit": "none",
           "min": 0,
-          "color": { "mode": "palette-classic" },
+          "color": {
+            "mode": "palette-classic"
+          },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "green", "value": 15 }
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 15
+              }
             ]
           },
-          "custom": { "drawStyle": "bars", "fillOpacity": 70, "lineWidth": 1, "thresholdsStyle": { "mode": "dashed" } }
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 70,
+            "lineWidth": 1,
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
         },
         "overrides": []
       },
-      "options": { "legend": { "showLegend": false }, "tooltip": { "mode": "single" } }
+      "options": {
+        "legend": {
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
     }
-  ]
+  ],
+  "liveNow": true
 }

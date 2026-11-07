@@ -8,8 +8,9 @@ import {
   DataSourceInstanceSettings,
   createDataFrame,
   FieldType,
+  LoadingState,
 } from '@grafana/data';
-import { lastValueFrom } from 'rxjs';
+import { Observable, from, lastValueFrom, merge } from 'rxjs';
 
 import {
   DEFAULT_SERVER_URL,
@@ -17,6 +18,7 @@ import {
   MyQuery,
   ServerTopic,
   SourceMode,
+  StreamMessage,
   TOPICS,
   TelemetryResponse,
   TelemetryTopic,
@@ -33,6 +35,11 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
     super(instanceSettings);
     this.mode = instanceSettings.jsonData.mode ?? 'mock';
     this.serverUrl = (instanceSettings.jsonData.serverUrl || DEFAULT_SERVER_URL).replace(/\/+$/, '');
+  }
+
+  /** WebSocket address of the server (http -> ws, https -> wss). */
+  get wsUrl(): string {
+    return this.serverUrl.replace(/^http/, 'ws');
   }
 
   getDefaultQuery(_: CoreApp): Partial<MyQuery> {
@@ -55,38 +62,57 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
     return this.get<ServerTopic[]>('/topics');
   }
 
-  async query(options: DataQueryRequest<MyQuery>): Promise<DataQueryResponse> {
-    const from = options.range.from.valueOf();
-    const to = options.range.to.valueOf();
+  query(options: DataQueryRequest<MyQuery>): Observable<DataQueryResponse> {
+    const rangeFrom = options.range.from.valueOf();
+    const rangeTo = options.range.to.valueOf();
     const maxPoints = options.maxDataPoints ?? 1000;
 
-    const data = await Promise.all(
-      options.targets.map((target) =>
+    const streams = options.targets.map((target) => {
+      if (this.mode === 'server' && target.live) {
+        return this.streamServer(target, rangeFrom, rangeTo, maxPoints);
+      }
+      const frame =
         this.mode === 'server'
-          ? this.queryServer(target, from, to, maxPoints)
-          : this.queryMock(target, from, to, maxPoints, options.intervalMs)
-      )
-    );
-    return { data };
+          ? this.queryServer(target, rangeFrom, rangeTo, maxPoints)
+          : Promise.resolve(this.queryMock(target, rangeFrom, rangeTo, maxPoints, options.intervalMs));
+      return from(frame.then((f) => ({ data: [f], key: target.refId })));
+    });
+
+    return merge(...streams);
   }
 
-  private queryMock(target: MyQuery, from: number, to: number, maxPoints: number, intervalMs: number): DataFrame {
+  private queryMock(
+    target: MyQuery,
+    rangeFrom: number,
+    rangeTo: number,
+    maxPoints: number,
+    intervalMs: number
+  ): DataFrame {
     const topic = (target.topic in TOPICS ? target.topic : 'speed') as TelemetryTopic;
     const meta = TOPICS[topic];
-    const minStepForRange = Math.ceil((to - from) / maxPoints);
+    const minStepForRange = Math.ceil((rangeTo - rangeFrom) / maxPoints);
     const step = Math.max(target.intervalMs ?? intervalMs, minStepForRange, MIN_STEP_MS);
-    const { times, values } = generateSeries(topic, from, to, step);
+    const { times, values } = generateSeries(topic, rangeFrom, rangeTo, step);
     return this.toFrame(target.refId, meta.label, meta.unit, times, values);
   }
 
-  private async queryServer(target: MyQuery, from: number, to: number, maxPoints: number): Promise<DataFrame> {
+  private fetchTelemetry(
+    target: MyQuery,
+    rangeFrom: number,
+    rangeTo: number,
+    maxPoints: number
+  ): Promise<TelemetryResponse> {
     const params = new URLSearchParams({
       topic: target.topic,
-      from: String(from),
-      to: String(to),
+      from: String(rangeFrom),
+      to: String(rangeTo),
       maxPoints: String(maxPoints),
     });
-    const res = await this.get<TelemetryResponse>(`/telemetry?${params.toString()}`);
+    return this.get<TelemetryResponse>(`/telemetry?${params.toString()}`);
+  }
+
+  private async queryServer(target: MyQuery, rangeFrom: number, rangeTo: number, maxPoints: number): Promise<DataFrame> {
+    const res = await this.fetchTelemetry(target, rangeFrom, rangeTo, maxPoints);
     return this.toFrame(
       target.refId,
       res.label,
@@ -94,6 +120,77 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
       res.points.map((p) => p[0]),
       res.points.map((p) => p[1])
     );
+  }
+
+  /** Backfill the visible range over REST, then append the points pushed over the WebSocket. */
+  private streamServer(
+    target: MyQuery,
+    rangeFrom: number,
+    rangeTo: number,
+    maxPoints: number
+  ): Observable<DataQueryResponse> {
+    return new Observable<DataQueryResponse>((subscriber) => {
+      const windowMs = rangeTo - rangeFrom;
+      const times: number[] = [];
+      const values: number[] = [];
+      let label = target.topic;
+      let unit = 'none';
+      let socket: WebSocket | undefined;
+      let stopped = false;
+
+      const emit = () => {
+        subscriber.next({
+          data: [this.toFrame(target.refId, label, unit, [...times], [...values])],
+          key: target.refId,
+          state: LoadingState.Streaming,
+        });
+      };
+
+      const fail = (message: string) => {
+        if (!stopped) {
+          stopped = true;
+          subscriber.error(new Error(message));
+        }
+      };
+
+      this.fetchTelemetry(target, rangeFrom, rangeTo, maxPoints)
+        .then((history) => {
+          if (stopped) {
+            return;
+          }
+          label = history.label;
+          unit = history.unit;
+          for (const [t, v] of history.points) {
+            times.push(t);
+            values.push(v);
+          }
+          emit();
+
+          const params = new URLSearchParams({ topic: target.topic });
+          socket = new WebSocket(`${this.wsUrl}/stream?${params.toString()}`);
+          socket.onmessage = (event: MessageEvent<string>) => {
+            const message: StreamMessage = JSON.parse(event.data);
+            for (const [t, v] of message.points) {
+              times.push(t);
+              values.push(v);
+            }
+            const oldest = times[times.length - 1] - windowMs;
+            while (times.length > 0 && times[0] < oldest) {
+              times.shift();
+              values.shift();
+            }
+            emit();
+          };
+          socket.onerror = () => fail(`Live stream to ${this.wsUrl} failed. Is the mock server running?`);
+          socket.onclose = () => fail('Live stream was closed by the AutoTrack server.');
+        })
+        .catch((err: unknown) => fail(err instanceof Error ? err.message : String(err)));
+
+      return () => {
+        stopped = true;
+        socket?.close();
+      };
+    });
   }
 
   private toFrame(refId: string, label: string, unit: string, times: number[], values: number[]): DataFrame {
