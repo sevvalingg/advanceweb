@@ -329,6 +329,95 @@
           "mode": "single"
         }
       }
+    },
+    {
+      "id": 7,
+      "type": "state-timeline",
+      "title": "AI: Sensor health",
+      "description": "Joint LiDAR/camera health per second. Healthy and stalled rates are learned from the data with k-means (no fixed threshold). Red = both sensors stalled at once (system-level). Hover the warning icon for the diagnosis. See docs/sensor-stall-analysis.md.",
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 24,
+        "h": 6
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "topic": "ai_sensor_health",
+          "live": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "fillOpacity": 85,
+            "lineWidth": 0
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "mergeValues": true,
+        "showValue": "never",
+        "rowHeight": 0.8,
+        "alignValue": "left",
+        "legend": {
+          "showLegend": true,
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "table",
+      "title": "AI: Stall diagnosis",
+      "description": "Diagnosis computed in the browser from the overlap and lag of the LiDAR and camera stalls, plus the thresholds learned by k-means. Updates every 5 s on a sliding window.",
+      "gridPos": {
+        "x": 0,
+        "y": 30,
+        "w": 24,
+        "h": 7
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "topic": "ai_diagnosis",
+          "live": true
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Diagnosis"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 620
+              },
+              {
+                "id": "custom.wrapText",
+                "value": true
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto",
+                  "wrapText": true
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true
+      }
     }
   ],
   "liveNow": true

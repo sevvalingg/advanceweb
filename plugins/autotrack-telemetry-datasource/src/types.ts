@@ -57,3 +57,11 @@ export interface MyDataSourceOptions extends DataSourceJsonData {
   mode?: SourceMode;
   serverUrl?: string;
 }
+
+/** Topics computed in the browser by the AI sensor health analysis (server mode only). */
+export const AI_HEALTH_TOPIC = 'ai_sensor_health';
+export const AI_DIAGNOSIS_TOPIC = 'ai_diagnosis';
+export const AI_TOPICS: ServerTopic[] = [
+  { id: AI_HEALTH_TOPIC, label: 'AI: Sensor health timeline', unit: 'none' },
+  { id: AI_DIAGNOSIS_TOPIC, label: 'AI: Stall diagnosis', unit: 'none' },
+];

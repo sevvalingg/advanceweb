@@ -9,10 +9,14 @@ import {
   createDataFrame,
   FieldType,
   LoadingState,
+  MappingType,
+  ValueMapping,
 } from '@grafana/data';
-import { Observable, from, lastValueFrom, merge } from 'rxjs';
+import { Observable, from, lastValueFrom, map, merge, switchMap, timer } from 'rxjs';
 
 import {
+  AI_DIAGNOSIS_TOPIC,
+  AI_TOPICS,
   DEFAULT_SERVER_URL,
   MyDataSourceOptions,
   MyQuery,
@@ -24,8 +28,26 @@ import {
   TelemetryTopic,
 } from './types';
 import { generateSeries } from './mock/telemetry';
+import { HealthAnalysis, HealthState, analyzeSensorHealth } from './ai/sensorHealth';
 
 const MIN_STEP_MS = 50;
+const AI_REFRESH_MS = 5000;
+
+const HEALTH_MAPPINGS: ValueMapping[] = [
+  {
+    type: MappingType.ValueToText,
+    options: {
+      [HealthState.Healthy]: { text: 'Healthy', color: 'green', index: 0 },
+      [HealthState.CameraStalled]: { text: 'Camera stalled', color: 'orange', index: 1 },
+      [HealthState.LidarStalled]: { text: 'LiDAR stalled', color: 'orange', index: 2 },
+      [HealthState.BothStalled]: { text: 'Both stalled (system-level)', color: 'red', index: 3 },
+    },
+  },
+];
+
+function isAiTopic(topic: string): boolean {
+  return AI_TOPICS.some((t) => t.id === topic);
+}
 
 export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
   readonly mode: SourceMode;
@@ -50,7 +72,7 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
     return !query.hide && !!query.topic;
   }
 
-  /** Topics offered in the query editor: a fixed list in mock mode, read from the server otherwise. */
+  /** Topics offered in the query editor: a fixed list in mock mode, server topics plus AI topics otherwise. */
   async listTopics(): Promise<ServerTopic[]> {
     if (this.mode === 'mock') {
       return (Object.keys(TOPICS) as TelemetryTopic[]).map((id) => ({
@@ -59,7 +81,8 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
         unit: TOPICS[id].unit,
       }));
     }
-    return this.get<ServerTopic[]>('/topics');
+    const topics = await this.get<ServerTopic[]>('/topics');
+    return [...topics, ...AI_TOPICS];
   }
 
   query(options: DataQueryRequest<MyQuery>): Observable<DataQueryResponse> {
@@ -68,6 +91,9 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
     const maxPoints = options.maxDataPoints ?? 1000;
 
     const streams = options.targets.map((target) => {
+      if (this.mode === 'server' && isAiTopic(target.topic)) {
+        return this.queryAi(target, rangeFrom, rangeTo);
+      }
       if (this.mode === 'server' && target.live) {
         return this.streamServer(target, rangeFrom, rangeTo, maxPoints);
       }
@@ -96,14 +122,9 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
     return this.toFrame(target.refId, meta.label, meta.unit, times, values);
   }
 
-  private fetchTelemetry(
-    target: MyQuery,
-    rangeFrom: number,
-    rangeTo: number,
-    maxPoints: number
-  ): Promise<TelemetryResponse> {
+  private fetchTelemetry(topic: string, rangeFrom: number, rangeTo: number, maxPoints: number): Promise<TelemetryResponse> {
     const params = new URLSearchParams({
-      topic: target.topic,
+      topic,
       from: String(rangeFrom),
       to: String(rangeTo),
       maxPoints: String(maxPoints),
@@ -112,7 +133,7 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
   }
 
   private async queryServer(target: MyQuery, rangeFrom: number, rangeTo: number, maxPoints: number): Promise<DataFrame> {
-    const res = await this.fetchTelemetry(target, rangeFrom, rangeTo, maxPoints);
+    const res = await this.fetchTelemetry(target.topic, rangeFrom, rangeTo, maxPoints);
     return this.toFrame(
       target.refId,
       res.label,
@@ -120,6 +141,34 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
       res.points.map((p) => p[0]),
       res.points.map((p) => p[1])
     );
+  }
+
+  /** AI topics: run the sensor health analysis once, or every few seconds on a sliding window when live. */
+  private queryAi(target: MyQuery, rangeFrom: number, rangeTo: number): Observable<DataQueryResponse> {
+    if (!target.live) {
+      return from(this.aiFrames(target, rangeFrom, rangeTo).then((data) => ({ data, key: target.refId })));
+    }
+    const windowMs = rangeTo - rangeFrom;
+    return timer(0, AI_REFRESH_MS).pipe(
+      switchMap(() => {
+        const now = Date.now();
+        return from(this.aiFrames(target, now - windowMs, now));
+      }),
+      map((data) => ({ data, key: target.refId, state: LoadingState.Streaming }))
+    );
+  }
+
+  private async aiFrames(target: MyQuery, rangeFrom: number, rangeTo: number): Promise<DataFrame[]> {
+    // One point per second is needed, so ask for enough points to avoid any downsampling.
+    const maxPoints = Math.ceil((rangeTo - rangeFrom) / 1000) + 10;
+    const [lidar, camera] = await Promise.all([
+      this.fetchTelemetry('lidar_hz', rangeFrom, rangeTo, maxPoints),
+      this.fetchTelemetry('camera_fps', rangeFrom, rangeTo, maxPoints),
+    ]);
+    const analysis = analyzeSensorHealth(lidar.points, camera.points);
+    return [
+      target.topic === AI_DIAGNOSIS_TOPIC ? diagnosisFrame(target.refId, analysis) : healthFrame(target.refId, analysis),
+    ];
   }
 
   /** Backfill the visible range over REST, then append the points pushed over the WebSocket. */
@@ -153,7 +202,7 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
         }
       };
 
-      this.fetchTelemetry(target, rangeFrom, rangeTo, maxPoints)
+      this.fetchTelemetry(target.topic, rangeFrom, rangeTo, maxPoints)
         .then((history) => {
           if (stopped) {
             return;
@@ -230,6 +279,52 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
       return { status: 'error', message: err instanceof Error ? err.message : String(err) };
     }
   }
+}
+
+/** Joint health state per second, coloured by the value mappings; the diagnosis is attached as a notice. */
+function healthFrame(refId: string, analysis: HealthAnalysis): DataFrame {
+  return createDataFrame({
+    refId,
+    name: 'Sensor health',
+    meta: { notices: [{ severity: analysis.severity, text: analysis.diagnosis }] },
+    fields: [
+      { name: 'Time', type: FieldType.time, values: analysis.states.map((s) => s[0]) },
+      {
+        name: 'Sensor health',
+        type: FieldType.number,
+        values: analysis.states.map((s) => s[1]),
+        config: { displayName: 'Sensor health', mappings: HEALTH_MAPPINGS },
+      },
+    ],
+  });
+}
+
+/** One-row summary: diagnosis text, overlap, lag, stalled seconds and the thresholds learned by k-means. */
+function diagnosisFrame(refId: string, analysis: HealthAnalysis): DataFrame {
+  const threshold = (value: number) => (Number.isFinite(value) ? Number(value.toFixed(1)) : null);
+  return createDataFrame({
+    refId,
+    name: 'Stall diagnosis',
+    fields: [
+      { name: 'Diagnosis', type: FieldType.string, values: [analysis.diagnosis] },
+      { name: 'Stall overlap', type: FieldType.number, values: [analysis.overlap], config: { unit: 'percentunit' } },
+      { name: 'Lag (camera vs LiDAR)', type: FieldType.number, values: [analysis.bestLag], config: { unit: 's' } },
+      { name: 'LiDAR stalled', type: FieldType.number, values: [analysis.stalledSeconds.lidar], config: { unit: 's' } },
+      { name: 'Camera stalled', type: FieldType.number, values: [analysis.stalledSeconds.camera], config: { unit: 's' } },
+      {
+        name: 'Learned LiDAR threshold',
+        type: FieldType.number,
+        values: [threshold(analysis.lidar.threshold)],
+        config: { unit: 'hertz' },
+      },
+      {
+        name: 'Learned camera threshold',
+        type: FieldType.number,
+        values: [threshold(analysis.camera.threshold)],
+        config: { unit: 'none' },
+      },
+    ],
+  });
 }
 
 function describeError(err: unknown, serverUrl: string): string {
