@@ -1,423 +1,156 @@
 {
-  "annotations": {
-    "list": [
-      {
-        "builtIn": 1,
-        "datasource": {
-          "type": "grafana",
-          "uid": "-- Grafana --"
-        },
-        "enable": true,
-        "hide": true,
-        "iconColor": "rgba(0, 211, 255, 1)",
-        "name": "Annotations & Alerts",
-        "type": "dashboard"
-      }
-    ]
-  },
-  "description": "Live vehicle telemetry of AutoTrack AI (speed, steering, battery packs). Data source plugin developed by Meryem Esma Eröz, SEN0415 Fall 2026.",
+  "uid": "gsrvx2",
+  "title": "AutoTrack Telemetry",
+  "description": "Real AutoTrack AI run (2026-10-20) replayed by the mock server. Data source plugin by Meryem Esma Eröz, SEN0415 Fall 2026.",
+  "tags": ["autotrack"],
   "editable": true,
-  "fiscalYearStartMonth": 0,
-  "graphTooltip": 0,
-  "liveNow": false,
+  "schemaVersion": 39,
+  "time": { "from": "now-2m", "to": "now" },
+  "refresh": "5s",
   "panels": [
     {
-      "datasource": {
-        "type": "autotrack-telemetry-datasource",
-        "uid": "P16091175048AC601"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "showValues": false,
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        }
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 8,
-        "x": 0,
-        "y": 0
-      },
       "id": 1,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "13.2.3",
-      "targets": [
-        {
-          "datasource": {
-            "type": "autotrack-telemetry-datasource",
-            "uid": "P16091175048AC601"
-          },
-          "refId": "A",
-          "topic": "speed"
-        }
-      ],
-      "title": "Speed",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "autotrack-telemetry-datasource",
-        "uid": "P16091175048AC601"
-      },
+      "type": "timeseries",
+      "title": "Speed command",
+      "description": "Commanded speed from the joystick (/joy). Never exceeds the 1 m/s software limit (NFR-04).",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [{ "refId": "A", "topic": "speed_cmd" }],
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "showValues": false,
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        }
+          "unit": "velocityms",
+          "min": -1,
+          "max": 1,
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineInterpolation": "stepAfter", "lineWidth": 2, "fillOpacity": 10 }
+        },
+        "overrides": []
       },
-      "gridPos": {
-        "h": 9,
-        "w": 8,
-        "x": 8,
-        "y": 0
-      },
+      "options": { "legend": { "showLegend": false }, "tooltip": { "mode": "single" } }
+    },
+    {
       "id": 2,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "13.2.3",
-      "targets": [
-        {
-          "datasource": {
-            "type": "autotrack-telemetry-datasource",
-            "uid": "P16091175048AC601"
-          },
-          "refId": "A",
-          "topic": "steering"
-        }
-      ],
-      "title": "Steering",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "autotrack-telemetry-datasource",
-        "uid": "P16091175048AC601"
-      },
+      "type": "timeseries",
+      "title": "Steering command",
+      "description": "Commanded steering angle from the joystick, ±19.5° at full stick (FR-02).",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [{ "refId": "A", "topic": "steering_cmd" }],
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "showValues": false,
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          }
-        }
+          "unit": "degree",
+          "min": -20,
+          "max": 20,
+          "color": { "mode": "palette-classic" },
+          "custom": { "lineInterpolation": "stepAfter", "lineWidth": 2, "fillOpacity": 10 }
+        },
+        "overrides": []
       },
-      "gridPos": {
-        "h": 9,
-        "w": 8,
-        "x": 16,
-        "y": 0
-      },
+      "options": { "legend": { "showLegend": false }, "tooltip": { "mode": "single" } }
+    },
+    {
       "id": 3,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "13.2.3",
-      "targets": [
-        {
-          "datasource": {
-            "type": "autotrack-telemetry-datasource",
-            "uid": "P16091175048AC601"
-          },
-          "refId": "A",
-          "topic": "battery_4s"
-        }
-      ],
-      "title": "Battery 4S – Jetson",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "autotrack-telemetry-datasource",
-        "uid": "P16091175048AC601"
-      },
+      "type": "timeseries",
+      "title": "Obstacle ahead",
+      "description": "Nearest LiDAR return within ±30° of the heading (FR-22). Red below 0.5 m, green above 1 m.",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "targets": [{ "refId": "A", "topic": "obstacle_front" }],
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "showValues": false,
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
+          "unit": "lengthm",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              {
-                "color": "green",
-                "value": 0
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
+              { "color": "red", "value": null },
+              { "color": "orange", "value": 0.5 },
+              { "color": "green", "value": 1 }
             ]
-          }
-        }
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 8,
-        "x": 0,
-        "y": 9
-      },
-      "id": 4,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "pluginVersion": "13.2.3",
-      "targets": [
-        {
-          "datasource": {
-            "type": "autotrack-telemetry-datasource",
-            "uid": "P16091175048AC601"
           },
-          "refId": "A",
-          "topic": "battery_3s"
-        }
-      ],
-      "title": "Battery 3S – Motor",
-      "type": "timeseries"
+          "custom": { "lineWidth": 1, "fillOpacity": 0, "thresholdsStyle": { "mode": "line+area" } }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "showLegend": false }, "tooltip": { "mode": "single" } }
+    },
+    {
+      "id": 4,
+      "type": "state-timeline",
+      "title": "Manual control",
+      "description": "Deadman button held: the car can only move while this is on (FR-03).",
+      "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
+      "targets": [{ "refId": "A", "topic": "manual_active" }],
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "fillOpacity": 80, "lineWidth": 0 },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": { "text": "Idle", "color": "dark-gray" },
+                "1": { "text": "Manual (deadman held)", "color": "green" }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "mergeValues": true,
+        "showValue": "never",
+        "rowHeight": 0.8,
+        "alignValue": "left",
+        "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom" }
+      }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "LiDAR scans per second",
+      "description": "Scans received per second (RPLidar S1, ~10 Hz expected). Drops to 0 reveal the LiDAR timeouts noted in WP1.",
+      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+      "targets": [{ "refId": "A", "topic": "lidar_hz" }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "hertz",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 10 }
+            ]
+          },
+          "custom": { "drawStyle": "bars", "fillOpacity": 70, "lineWidth": 1, "thresholdsStyle": { "mode": "dashed" } }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "showLegend": false }, "tooltip": { "mode": "single" } }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Camera FPS",
+      "description": "ZED frames recorded per second vs. the 15 FPS target (NFR-02).",
+      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+      "targets": [{ "refId": "A", "topic": "camera_fps" }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "min": 0,
+          "color": { "mode": "palette-classic" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 15 }
+            ]
+          },
+          "custom": { "drawStyle": "bars", "fillOpacity": 70, "lineWidth": 1, "thresholdsStyle": { "mode": "dashed" } }
+        },
+        "overrides": []
+      },
+      "options": { "legend": { "showLegend": false }, "tooltip": { "mode": "single" } }
     }
-  ],
-  "preload": false,
-  "refresh": "5s",
-  "schemaVersion": 42,
-  "time": {
-    "from": "now-5m",
-    "to": "now"
-  },
-  "timepicker": {
-    "refresh_intervals": [
-      "5s",
-      "10s",
-      "30s",
-      "1m",
-      "5m",
-      "15m",
-      "30m",
-      "1h",
-      "2h",
-      "1d"
-    ]
-  },
-  "timezone": "browser",
-  "title": "AutoTrack Telemetry",
-  "version": 1,
-  "uid": "gsrvx2",
-  "id": 3375179689156608
+  ]
 }
