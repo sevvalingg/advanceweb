@@ -122,7 +122,12 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
     return this.toFrame(target.refId, meta.label, meta.unit, times, values);
   }
 
-  private fetchTelemetry(topic: string, rangeFrom: number, rangeTo: number, maxPoints: number): Promise<TelemetryResponse> {
+  private fetchTelemetry(
+    topic: string,
+    rangeFrom: number,
+    rangeTo: number,
+    maxPoints: number
+  ): Promise<TelemetryResponse> {
     const params = new URLSearchParams({
       topic,
       from: String(rangeFrom),
@@ -132,7 +137,12 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
     return this.get<TelemetryResponse>(`/telemetry?${params.toString()}`);
   }
 
-  private async queryServer(target: MyQuery, rangeFrom: number, rangeTo: number, maxPoints: number): Promise<DataFrame> {
+  private async queryServer(
+    target: MyQuery,
+    rangeFrom: number,
+    rangeTo: number,
+    maxPoints: number
+  ): Promise<DataFrame> {
     const res = await this.fetchTelemetry(target.topic, rangeFrom, rangeTo, maxPoints);
     return this.toFrame(
       target.refId,
@@ -167,7 +177,9 @@ export class DataSource extends DataSourceApi<MyQuery, MyDataSourceOptions> {
     ]);
     const analysis = analyzeSensorHealth(lidar.points, camera.points);
     return [
-      target.topic === AI_DIAGNOSIS_TOPIC ? diagnosisFrame(target.refId, analysis) : healthFrame(target.refId, analysis),
+      target.topic === AI_DIAGNOSIS_TOPIC
+        ? diagnosisFrame(target.refId, analysis)
+        : healthFrame(target.refId, analysis),
     ];
   }
 
@@ -310,7 +322,12 @@ function diagnosisFrame(refId: string, analysis: HealthAnalysis): DataFrame {
       { name: 'Stall overlap', type: FieldType.number, values: [analysis.overlap], config: { unit: 'percentunit' } },
       { name: 'Lag (camera vs LiDAR)', type: FieldType.number, values: [analysis.bestLag], config: { unit: 's' } },
       { name: 'LiDAR stalled', type: FieldType.number, values: [analysis.stalledSeconds.lidar], config: { unit: 's' } },
-      { name: 'Camera stalled', type: FieldType.number, values: [analysis.stalledSeconds.camera], config: { unit: 's' } },
+      {
+        name: 'Camera stalled',
+        type: FieldType.number,
+        values: [analysis.stalledSeconds.camera],
+        config: { unit: 's' },
+      },
       {
         name: 'Learned LiDAR threshold',
         type: FieldType.number,

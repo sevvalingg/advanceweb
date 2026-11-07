@@ -1,13 +1,13 @@
-import React, { ChangeEvent, useEffect, useState } from 'react';
-import { Alert, InlineField, InlineSwitch, Input, Select, Stack } from '@grafana/ui';
-import { QueryEditorProps, SelectableValue } from '@grafana/data';
+import React, { ChangeEvent, SyntheticEvent, useEffect, useState } from 'react';
+import { Alert, Combobox, ComboboxOption, InlineField, InlineSwitch, Input, Stack } from '@grafana/ui';
+import { QueryEditorProps } from '@grafana/data';
 import { DataSource } from '../datasource';
 import { MyDataSourceOptions, MyQuery } from '../types';
 
 type Props = QueryEditorProps<DataSource, MyQuery, MyDataSourceOptions>;
 
 export function QueryEditor({ query, onChange, onRunQuery, datasource }: Props) {
-  const [topicOptions, setTopicOptions] = useState<Array<SelectableValue<string>>>([]);
+  const [topicOptions, setTopicOptions] = useState<Array<ComboboxOption<string>>>([]);
   const [loadError, setLoadError] = useState<string>();
 
   useEffect(() => {
@@ -30,8 +30,8 @@ export function QueryEditor({ query, onChange, onRunQuery, datasource }: Props) 
     };
   }, [datasource]);
 
-  const onTopicChange = (option: SelectableValue<string>) => {
-    if (!option.value) {
+  const onTopicChange = (option: ComboboxOption<string>) => {
+    if (!option?.value) {
       return;
     }
     onChange({ ...query, topic: option.value });
@@ -43,7 +43,7 @@ export function QueryEditor({ query, onChange, onRunQuery, datasource }: Props) 
     onChange({ ...query, intervalMs: Number.isNaN(parsed) ? undefined : parsed });
   };
 
-  const onLiveChange = (event: React.FormEvent<HTMLInputElement>) => {
+  const onLiveChange = (event: SyntheticEvent<HTMLInputElement>) => {
     onChange({ ...query, live: event.currentTarget.checked });
     onRunQuery();
   };
@@ -58,11 +58,11 @@ export function QueryEditor({ query, onChange, onRunQuery, datasource }: Props) 
       )}
       <Stack gap={1}>
         <InlineField label="Topic" labelWidth={10} tooltip="Which vehicle signal to query">
-          <Select
+          <Combobox
             options={topicOptions}
             value={query.topic}
             onChange={onTopicChange}
-            isLoading={!topicOptions.length && !loadError}
+            loading={!topicOptions.length && !loadError}
             width={30}
           />
         </InlineField>

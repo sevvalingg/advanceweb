@@ -64,10 +64,7 @@ describe('analyzeSensorHealth', () => {
   });
 
   it('reports sensor-specific causes when the stalls are independent', () => {
-    const result = analyzeSensorHealth(
-      series(30, range(2, 4), LIDAR_HZ),
-      series(30, range(15, 17), CAMERA_FPS)
-    );
+    const result = analyzeSensorHealth(series(30, range(2, 4), LIDAR_HZ), series(30, range(15, 17), CAMERA_FPS));
 
     expect(result.overlap).toBe(0);
     expect(result.diagnosis).toContain('Mostly independent');

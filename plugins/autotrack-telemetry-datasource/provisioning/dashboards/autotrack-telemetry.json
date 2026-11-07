@@ -2,9 +2,7 @@
   "uid": "gsrvx2",
   "title": "AutoTrack Telemetry",
   "description": "Real AutoTrack AI run (2026-10-20) replayed by the mock server. Data source plugin by Meryem Esma Eröz, SEN0415 Fall 2026.",
-  "tags": [
-    "autotrack"
-  ],
+  "tags": ["autotrack"],
   "editable": true,
   "schemaVersion": 39,
   "time": {

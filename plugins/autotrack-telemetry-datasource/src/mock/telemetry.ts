@@ -59,4 +59,4 @@ export function generateSeries(topic: TelemetryTopic, from: number, to: number, 
     values.push(mockValue(topic, ts));
   }
   return { times, values };
-}   
+}

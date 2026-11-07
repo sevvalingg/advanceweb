@@ -12,4 +12,4 @@ services:
       - ../../mock-server:/app:ro
     command: run --allow-net --allow-read --allow-env server.ts
     ports:
-      - "8080:8080"
+      - '8080:8080'
