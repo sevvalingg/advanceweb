@@ -132,8 +132,12 @@ over and over. We studied this before writing any AI code; the full study is in
 - Both sensors stall in exactly the same 37 of 100 seconds (Jaccard overlap 1.00, peak at 0 s lag).
 - Both stop *producing* data: 14 gaps longer than 0.5 s in the sensors' own `header.stamp`, up to 4.9 s,
   while the recording delay never exceeds about 1 s. So the recorder is not the cause.
-- Conclusion: a **system-level** problem (shared USB hub, CPU/disk load or power), not a faulty sensor.
-  This is the likely root cause of the "LiDAR occasionally times out" issue noted in WP1.
+- Replicated on a second, independent 16-minute run: 530 of 532 stalled seconds shared (Jaccard 1.00, 0 s lag).
+- Stalls start about one minute into recording and are just as frequent while the car stands still. This
+  points to the recording load (disk write-back of about 15 MB/s of images) rather than the USB hub, heat or
+  the motor.
+- Conclusion: a **system-level** problem, not a faulty sensor, and the likely root cause of the
+  "LiDAR occasionally times out" issue noted in WP1.
 
 **What the plugin does** ([`src/ai/sensorHealth.ts`](plugins/autotrack-telemetry-datasource/src/ai/sensorHealth.ts)),
 entirely client side, on the data it receives from Grafana queries:

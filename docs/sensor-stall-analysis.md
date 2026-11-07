@@ -90,3 +90,56 @@ Each experiment produces a new bag; running this analysis on it gives a before/a
 The data source plugin automates this analysis in the browser for every replayed run (AI section of the
 project): it learns the healthy/stalled threshold of each sensor from the data (k-means), shows a joint
 health timeline and reports a diagnosis based on the overlap and lag measured above.
+
+## 7. Replication and time course (second recording)
+
+**Data:** `rosbag2_2026_10_20-17_37_29_0.db3`, a separate drive on the same day, 969 s (16 min). Unlike the
+first run, it also contains `/odom` (measured speed) and `/ackermann_cmd` (drive commands).
+
+### 7.1 Replication
+
+| Metric | Run 1 (100 s) | Run 2 (969 s) |
+|---|---|---|
+| LiDAR stalled seconds | 37 (37 %) | 530 (55 %) |
+| Camera stalled seconds | 37 (37 %) | 532 (55 %) |
+| Both stalled | 37 | 530 |
+| Jaccard overlap | 1.00 | 1.00 (530 / 532) |
+| Peak of the lagged overlap | 0 s | 0 s |
+| Gaps > 0.5 s in sensor time (LiDAR / camera) | 14 / 14 | 148 / 156 |
+| Longest gap in sensor time (LiDAR / camera) | 4.48 s / 4.93 s | 6.08 s / 6.80 s |
+| Max production → recording delay | 1.10 s | 1.86 s |
+
+A ten times longer, independent recording shows the same pattern: the two sensors stall together, at
+zero lag, and stop producing data at the source.
+
+### 7.2 Time course and vehicle motion
+
+Per minute of run 2: share of seconds with no LiDAR scan, and share of `/odom` messages with a measured
+speed above 0.05 m/s.
+
+| Minute | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 | 16 |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Stalled | 3 % | 33 % | 58 % | 60 % | 60 % | 57 % | 58 % | 62 % | 62 % | 62 % | 57 % | 60 % | 62 % | 60 % | 60 % | 60 % | 67 % |
+| Moving | 37 % | 28 % | 39 % | 85 % | 84 % | 53 % | 50 % | 26 % | 68 % | 1 % | 2 % | 0 % | 56 % | 0 % | 0 % | 0 % | 0 % |
+
+- The first minute is almost free of stalls although the car is already moving.
+- Within about two minutes the stall rate rises to roughly 60 % and then stays flat.
+- In minutes 9–11 and 13–16 the car stands still, yet the stall rate does not change.
+
+### 7.3 Updated interpretation
+
+| Hypothesis | Expected pattern | Verdict |
+|---|---|---|
+| Recorder-only stall | Gaps only in recording time | Rejected: gaps in sensor time (§4) |
+| Thermal throttling | Slow, continuous increase | Unlikely: flat plateau |
+| USB hub bandwidth | Stalls from the first second | Unlikely: first minute is healthy |
+| Motor load or power dips | Stalls only while driving | Rejected: same rate while standing still |
+| **Recording load (disk write-back)** | Healthy until the write cache fills, then a steady rhythm, independent of motion | **Consistent with all observations** |
+
+About 15 MB/s of camera images are written during recording. Linux first buffers these writes in RAM;
+once the buffer is full, write-back blocks and the driver processes on the Jetson are delayed with it.
+This matches the healthy first minute, the fast transition and the flat plateau.
+
+**Prediction to test on the car:** a recording without the camera topic (or with compressed images or
+a faster disk) should show no stalls. If confirmed, the stalls are a property of *recording*, not of
+autonomous driving, which matters for how the team logs data in WP7 and WP8.
