@@ -3,6 +3,9 @@
 > **Status: DRAFT for team review.** Proposed by Meryem Betül for the three plugins. Nothing here is final
 > until Esma (data source), Şevval (lane panel) and Meryem Betül (debug panel) agree. Open questions are at
 > the end.
+>
+> The decision columns (state machine, tasks) come from the AutoTrack decision engine, which Meryem Nur
+> builds in the AutoTrack AI team. She is not part of this project; we only use her data.
 
 One format that **every plugin reads**, whether the data comes from a recorded CSV, the replay server or,
 later, the car itself. The column names follow the ROS 2 topics that AutoTrack AI publishes or will publish,
@@ -85,7 +88,7 @@ values are left empty.
 Detection classes, same names and order as `configs/classes.txt` in the AutoTrack repo:
 `sign_stop`, `sign_pedestrian_crossing`, `sign_speed_limit`, `light_red`, `light_yellow`, `light_green`, `pedestrian`.
 
-### Decision (Meryem Nur, WP4)
+### Decision (AutoTrack decision engine, WP4)
 
 | Column | Type | Unit | ROS source | Description | Now |
 |---|---|---|---|---|---|
@@ -93,7 +96,7 @@ Detection classes, same names and order as `configs/classes.txt` in the AutoTrac
 | `task` | text | – | decision engine | Course task the car is working on now | ❌ |
 | `tasks_done` | text | – | decision engine | Finished tasks, separated by `;` (e.g. `lane_following;traffic_sign`) | ❌ |
 
-Proposed states (to be confirmed with Meryem Nur):
+Proposed states (to be confirmed with Meryem Nur, who builds the decision engine in AutoTrack AI):
 `IDLE`, `MANUAL`, `FOLLOW_LANE`, `STOP_SIGN`, `WAIT_LIGHT`, `YIELD_PEDESTRIAN`, `AVOID_OBSTACLE`,
 `OVERTAKE`, `ROAD_WORKS`, `PARK`, `FINISHED`.
 
@@ -138,8 +141,8 @@ The data source derives alerts from the columns above and sends them to the pane
 
 ## 7. Open questions
 
-1. **Meryem Nur:** are these the right states? Does the decision engine know which tasks are finished,
-   or should the debug panel work it out from the state changes?
+1. **To ask Meryem Nur (AutoTrack decision engine):** are these the right states? Does the decision
+   engine know which tasks are finished, or should the debug panel work it out from the state changes?
 2. **Şevval:** can lane detection give `lane_left_m` / `lane_right_m`, or only the lateral and heading error?
 3. **Esma:** is 10 Hz enough for the panels? LiDAR runs at 10 Hz and the camera at 15 FPS, so a faster rate
    would only repeat values.
