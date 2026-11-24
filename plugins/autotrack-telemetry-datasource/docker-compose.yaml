@@ -11,5 +11,8 @@ services:
     volumes:
       - ../../mock-server:/app:ro
     command: run --allow-net --allow-read --allow-env server.ts
+    # Replay a telemetry_node CSV instead of the default JSON run, e.g. the 23 Nov track day:
+    # environment:
+    #   - DATA_FILE=./data/23kasim/00_tam_kayit_23kasim.csv
     ports:
       - '8080:8080'
