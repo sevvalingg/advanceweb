@@ -180,6 +180,27 @@ python tools/stall_analysis.py <recording.db3>
 
 Set `DATA_FILE` for the mock server in `docker-compose.yaml` to replay a different run.
 
+### Telemetry CSV runs (real track data)
+
+The mock server also replays the CSV files that AutoTrack's `telemetry_node` writes on the Jetson
+(`run_*.csv`, one row every 100 ms). Set `DATA_FILE` to a `.csv` file and the server parses it with
+`mock-server/telemetry_csv.ts`; `/topics` then lists only the topics that file contains.
+
+`mock-server/data/23kasim/` holds real data from the 23 November 2026 track day (full run plus four
+scenarios: straight driving, lane loss in a curve, steering oscillation, stop sign). Column meanings,
+units and sign conventions are in `mock-server/data/23kasim/README.md`.
+
+Extra topics from CSV runs: `speed_out`, `lateral_error_m` (+ = lane centre right), `heading_error_rad`,
+`line_count`, `lane_lost`, `state_code` (0 STOP, 1 DRIVE, 2 SLOW_DOWN, 3 MANUAL_OVERRIDE),
+`detection_count`, `lane_fps`, `detections_fps`, `detection_latency_ms`, `odom_speed_mps`.
+CSV runs have no `lidar_hz`, so the AI sensor-health topics need a JSON run from `bag_to_json.py`.
+
+```bash
+cd mock-server
+DATA_FILE=./data/23kasim/02_viraj_serit_kaybi.csv deno run --allow-net --allow-read --allow-env server.ts
+deno test --allow-read telemetry_csv_test.ts      # 9 tests
+```
+
 ## Repository layout
 
 ```
@@ -187,7 +208,8 @@ advanceweb/
 ├── docs/                                  screenshots and the sensor stall study
 ├── mock-server/
 │   ├── server.ts                          Deno replay server (REST + WebSocket)
-│   ├── data/                              converted runs (JSON)
+│   ├── telemetry_csv.ts                   telemetry_node CSV loader (+ telemetry_csv_test.ts)
+│   ├── data/                              converted runs (JSON) and 23kasim/ telemetry CSVs
 │   └── tools/                             bag_to_json.py, stall_analysis.py
 └── plugins/
     └── autotrack-telemetry-datasource/

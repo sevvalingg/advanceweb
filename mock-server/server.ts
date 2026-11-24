@@ -5,16 +5,11 @@
  *
  * REST:      GET /health, GET /topics, GET /telemetry?topic=&from=&to=&maxPoints=
  * WebSocket: GET /stream?topic=   pushes new points as they "happen"
+ *
+ * DATA_FILE can be a JSON run (tools/bag_to_json.py) or a telemetry_node CSV (run_*.csv).
  */
 
-type Point = [number, number];
-
-interface Run {
-  source: string;
-  recorded_at: string;
-  duration_ms: number;
-  series: Record<string, Point[]>;
-}
+import { parseTelemetryCsv, type Point, type Run } from './telemetry_csv.ts';
 
 interface TopicMeta {
   label: string;
@@ -33,9 +28,30 @@ const TOPICS: Record<string, TopicMeta> = {
   obstacle_front: { label: 'Obstacle ahead', unit: 'lengthm' },
   lidar_hz: { label: 'LiDAR scans per second', unit: 'hertz' },
   camera_fps: { label: 'Camera frames per second', unit: 'none' },
+  // Telemetry CSV runs (telemetry_node) only:
+  speed_out: { label: 'Speed after limiter', unit: 'velocityms' },
+  lateral_error_m: { label: 'Lateral error (+ = lane centre right)', unit: 'lengthm' },
+  heading_error_rad: { label: 'Heading error', unit: 'radian' },
+  line_count: { label: 'Lane lines seen', unit: 'none' },
+  lane_lost: { label: 'Lane lost', unit: 'bool_on_off' },
+  state_code: { label: 'State (0 STOP, 1 DRIVE, 2 SLOW_DOWN, 3 MANUAL)', unit: 'none' },
+  detection_count: { label: 'Detections in frame', unit: 'none' },
+  lane_fps: { label: 'Lane results per second', unit: 'hertz' },
+  detections_fps: { label: 'Detector results per second', unit: 'hertz' },
+  detection_latency_ms: { label: 'Detection latency', unit: 'ms' },
+  odom_speed_mps: { label: 'Odometry speed (unreliable below 0.3 m/s)', unit: 'velocityms' },
 };
 
-const run: Run = JSON.parse(await Deno.readTextFile(DATA_FILE));
+async function loadRun(path: string): Promise<Run> {
+  const text = await Deno.readTextFile(path);
+  if (path.toLowerCase().endsWith('.csv')) {
+    const name = path.split(/[\\/]/).pop() ?? path;
+    return parseTelemetryCsv(text, name, Deno.env.get('RECORDED_AT') ?? new Date(0).toISOString());
+  }
+  return JSON.parse(text);
+}
+
+const run: Run = await loadRun(DATA_FILE);
 const loopMs = run.duration_ms;
 
 const CORS_HEADERS = {
@@ -80,7 +96,7 @@ function handleTelemetry(params: URLSearchParams): Response {
   const maxPoints = Number(params.get('maxPoints') ?? DEFAULT_MAX_POINTS);
 
   if (!isKnownTopic(topic)) {
-    return json({ error: `Unknown topic '${topic}'`, topics: Object.keys(TOPICS) }, 404);
+    return json({ error: `Unknown topic '${topic}'`, topics: Object.keys(TOPICS).filter((id) => id in run.series) }, 404);
   }
   if (!Number.isFinite(from) || !Number.isFinite(to) || from > to) {
     return json({ error: "Query parameters 'from' and 'to' must be epoch milliseconds with from <= to" }, 400);
@@ -100,7 +116,7 @@ function handleStream(req: Request, params: URLSearchParams): Response {
     return json({ error: 'This endpoint expects a WebSocket connection' }, 400);
   }
   if (!isKnownTopic(topic)) {
-    return json({ error: `Unknown topic '${topic}'`, topics: Object.keys(TOPICS) }, 404);
+    return json({ error: `Unknown topic '${topic}'`, topics: Object.keys(TOPICS).filter((id) => id in run.series) }, 404);
   }
 
   const { socket, response } = Deno.upgradeWebSocket(req);
@@ -132,7 +148,11 @@ Deno.serve({ port: PORT, hostname: '0.0.0.0' }, (req) => {
     case '/health':
       return json({ status: 'ok', source: run.source, recorded_at: run.recorded_at, loop_ms: loopMs });
     case '/topics':
-      return json(Object.entries(TOPICS).map(([id, meta]) => ({ id, ...meta })));
+      return json(
+        Object.entries(TOPICS)
+          .filter(([id]) => id in run.series)
+          .map(([id, meta]) => ({ id, ...meta }))
+      );
     case '/telemetry':
       return handleTelemetry(url.searchParams);
     case '/stream':
