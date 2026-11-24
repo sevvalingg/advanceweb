@@ -4,37 +4,22 @@ import { SimplePanel } from './components/SimplePanel';
 
 export const plugin = new PanelPlugin<SimpleOptions>(SimplePanel).setPanelOptions((builder) => {
   return builder
-    .addTextInput({
-      path: 'text',
-      name: 'Simple text option',
-      description: 'Description of panel option',
-      defaultValue: 'Default value of text input option',
+    .addNumberInput({
+      path: 'goodBandCm',
+      name: 'İyi bölge (cm)',
+      description: 'Sapma bu değerin altındaysa araç şeritte iyi gidiyor sayılır',
+      defaultValue: 10,
+    })
+    .addNumberInput({
+      path: 'jumpThresholdCm',
+      name: 'Zıplama eşiği (cm)',
+      description: 'Art arda iki ölçüm arasındaki fark bundan büyükse zıplama olarak işaretlenir',
+      defaultValue: 10,
     })
     .addBooleanSwitch({
-      path: 'showSeriesCount',
-      name: 'Show series counter',
+      path: 'invertOffset',
+      name: 'Sapma işaretini ters çevir',
+      description: 'Veri kaynağında pozitif sapma araç sağda demekse açın (ortak formatta pozitif = araç solda)',
       defaultValue: false,
-    })
-    .addRadio({
-      path: 'seriesCountSize',
-      defaultValue: 'sm',
-      name: 'Series counter size',
-      settings: {
-        options: [
-          {
-            value: 'sm',
-            label: 'Small',
-          },
-          {
-            value: 'md',
-            label: 'Medium',
-          },
-          {
-            value: 'lg',
-            label: 'Large',
-          },
-        ],
-      },
-      showIf: (config) => config.showSeriesCount,
     });
 });
