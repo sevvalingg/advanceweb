@@ -26,7 +26,7 @@
 | 5 | `speed_cmd` | m/s | `/drive_raw` | Speed requested by the decision node |
 | 6 | `steering_cmd` | rad | `/drive_raw` | **+ = left** |
 | 7 | `speed_out` | m/s | `/drive` | After the speed limiter and curve slow-down. **Use this for speed charts** |
-| 8 | `lateral_error_m` | m | `/lane_error` x | **+ = lane centre is to the RIGHT of the car** (see section 3) |
+| 8 | `lateral_error_m` | m | `/lane_error` x | **+ = lane centre is to the RIGHT of the car**, i.e. the car is left of it (section 3) |
 | 9 | `heading_error_rad` | rad | `/lane_error` y | |
 | 10 | `line_count` | 0/1/2 | `/lane_error` z | Lane lines seen; 0 = lane lost |
 | 11 | `obstacle_m` | m | `/autotrack/obstacle` x | Nearest obstacle ahead, from the LiDAR |
@@ -51,17 +51,14 @@ Things to know when reading a run:
 
 ## 3. Sign conventions
 
-`steering_cmd` follows ROS REP 103 (+ = left), but `lateral_error_m` is + = lane centre to the **right**.
-The CSV keeps the values exactly as `telemetry_node` writes them. The **data source** converts when it
-serves them, so every panel sees one rule, **+ = left**:
+One rule for the whole format: **+ = left** (ROS REP 103).
 
-| Column in the CSV | Served by the data source as | Conversion |
-|---|---|---|
-| `lateral_error_m` (+ = centre right) | car offset from the lane centre, + = car left of centre | sign flipped |
-| `steering_cmd` (rad) | degrees, + = left | × 180 / π (already in PR #4) |
-
-A panel that reads the CSV directly (Grafana TestData "CSV content") gets the raw values and must apply
-the same conversion.
+- `steering_cmd`: + = steering to the left.
+- `lateral_error_m`: `telemetry_node` describes it as "+ = lane centre is to the RIGHT of the car". That is
+  the same as "+ = the car is LEFT of the lane centre", so it already follows the + = left rule.
+  **No conversion is needed**, neither in the data source nor in a panel that reads the CSV directly.
+  Example: `lateral_error_m = 0.05` means the lane centre is 5 cm to the right, i.e. the car is 5 cm left.
+- The data source only converts units: `steering_cmd` from rad to degrees (× 180 / π, already in PR #4).
 
 ## 4. Battery (not in telemetry_node yet)
 
@@ -111,7 +108,7 @@ way, by comparing a row with the one before it.
    show it. The debug panel accepts both for now.
 2. **Esma:** can the data source serve `state`, `reasons` and `detections` as string fields, next to
    `state_code`?
-3. **Esma / Şevval:** do we agree that the data source flips `lateral_error_m`, and that a panel reading
-   the CSV directly flips it itself?
+3. **Esma / Şevval:** do we agree that `lateral_error_m` needs no sign conversion (section 3)? An earlier
+   version of this draft wrongly said the data source should flip it.
 4. **To ask Meryem Nur (AutoTrack decision engine):** could the decision node publish the current course
    task, so `task` and `tasks_done` can be written? Until then the debug panel cannot show task progress.
