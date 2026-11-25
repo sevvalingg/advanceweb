@@ -16,14 +16,12 @@ export function stateColor(theme: GrafanaTheme2, state: string): string {
   switch (kind) {
     case 'driving':
       return theme.colors.success.main;
-    case 'waiting':
+    case 'slow':
       return theme.colors.warning.main;
-    case 'manoeuvre':
+    case 'stopped':
+      return theme.colors.error.main;
+    case 'manual':
       return theme.visualization.getColorByName('purple');
-    case 'done':
-      return theme.colors.info.main;
-    case 'idle':
-      return theme.colors.secondary.main;
     default:
       return theme.colors.text.secondary;
   }
@@ -141,6 +139,9 @@ function StateCard({ view }: { view: DebugState }) {
             {current.state}
           </span>
           <div className={styles.muted}>for {formatDuration(current.end - current.start)}</div>
+          {view.reasons.current.length > 0 && (
+            <div data-testid="debug-reasons">Why: {view.reasons.current.join(' · ')}</div>
+          )}
         </>
       ) : (
         <div className={styles.muted}>No state yet</div>
@@ -166,13 +167,13 @@ function Metric({ label, value, unit, bad }: { label: string; value: number | nu
 function PerceptionCard({ view, options }: { view: DebugState; options: DebugOptions }) {
   const styles = useStyles2(getStyles);
   const theme = useTheme2();
-  const fps = view.perceptionFps;
+  const fps = view.detectionsFps;
   const nothing = !fps.present && !view.cameraFps.present && !view.latencyMs.present;
   return (
     <div className={styles.card} data-testid="debug-perception">
       <div className={styles.heading}>FPS and latency</div>
       {nothing ? (
-        <Missing column="perception_fps" />
+        <Missing column="detections_fps" />
       ) : (
         <>
           <div
@@ -181,7 +182,7 @@ function PerceptionCard({ view, options }: { view: DebugState; options: DebugOpt
           >
             {fps.value === null ? '–' : `${fps.value.toFixed(1)} FPS`}
           </div>
-          <div className={styles.muted}>model · target {options.fpsTarget} FPS (NFR-02)</div>
+          <div className={styles.muted}>detections · target {options.fpsTarget} FPS (NFR-02)</div>
           <Metric label="Camera" value={view.cameraFps.value} unit="FPS" bad={(view.cameraFps.value ?? 1) < 1} />
           <Metric
             label="Latency"
@@ -202,15 +203,23 @@ function DetectionCard({ view }: { view: DebugState }) {
     <div className={styles.card} data-testid="debug-detection">
       <div className={styles.heading}>Last detection</div>
       {!view.detection.present ? (
-        <Missing column="detection_class" />
+        <Missing column="detections" />
       ) : last ? (
         <>
           <div className={styles.big}>{DETECTION_LABELS[last.cls] ?? last.cls}</div>
           <div className={styles.muted}>
             {last.conf !== null && `${Math.round(last.conf * 100)} % · `}
-            {last.distance !== null && `${last.distance.toFixed(2)} m · `}
             {view.now !== null && `${formatDuration(view.now - last.t)} ago`}
           </div>
+          {last.all.length > 1 && (
+            <div className={styles.muted}>
+              also{' '}
+              {last.all
+                .slice(1)
+                .map((d) => DETECTION_LABELS[d.cls] ?? d.cls)
+                .join(', ')}
+            </div>
+          )}
         </>
       ) : (
         <div className={styles.muted}>Nothing detected yet</div>
@@ -277,6 +286,7 @@ function Timeline({ view }: { view: DebugState }) {
             <li key={`${s.state}-${s.start}`}>
               <span className={styles.muted}>{formatTime(s.start)}</span> {before ? `${before.state} → ` : ''}
               <span style={{ color: stateColor(theme, s.state) }}>{s.state}</span>
+              {s.reasons.length > 0 && <span className={styles.muted}> · {s.reasons.join(', ')}</span>}
             </li>
           );
         })}

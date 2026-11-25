@@ -28,24 +28,39 @@ function renderPanel(series: PanelData['series']) {
 }
 
 describe('DebugPanel', () => {
-  it('shows the state, the tasks, the detection and the developer', () => {
+  it('shows the state, the reason, the detection and the developer', () => {
     renderPanel([
       createDataFrame({
         fields: [
-          { name: 'time_ms', type: FieldType.number, values: [0, 1000, 2500] },
-          { name: 'state', type: FieldType.string, values: ['FOLLOW_LANE', 'FOLLOW_LANE', 'WAIT_LIGHT'] },
-          { name: 'task', type: FieldType.string, values: ['traffic_light', 'traffic_light', 'traffic_light'] },
-          { name: 'tasks_done', type: FieldType.string, values: ['lane_following;traffic_sign', null, null] },
-          { name: 'perception_fps', type: FieldType.number, values: [16, 11, 16] },
-          { name: 'detection_class', type: FieldType.string, values: [null, 'light_red', null] },
+          { name: 't_s', type: FieldType.number, values: [760.0, 761.0, 762.5] },
+          { name: 'state', type: FieldType.string, values: ['DRIVE', 'DRIVE', 'STOP'] },
+          { name: 'reasons', type: FieldType.string, values: ['yol acik', 'yol acik', 'dur levhasi'] },
+          { name: 'detections_fps', type: FieldType.number, values: [15, 11, 15] },
+          { name: 'detections', type: FieldType.string, values: [null, 'sign_stop:0.93 light_red:0.41', null] },
         ],
       }),
     ]);
-    expect(screen.getAllByText('WAIT_LIGHT').length).toBeGreaterThan(0);
-    expect(screen.getByText('Red light')).toBeInTheDocument();
-    expect(screen.getByText(/1\.5 s ago/)).toBeInTheDocument();
-    expect(screen.getByText(/2 \/ 8 done/)).toBeInTheDocument();
+    expect(screen.getAllByText('STOP').length).toBeGreaterThan(0);
+    expect(screen.getByText('Why: dur levhasi')).toBeInTheDocument();
+    expect(screen.getByText('Stop sign')).toBeInTheDocument();
+    expect(screen.getByText(/93 % · 1\.5 s ago/)).toBeInTheDocument();
+    expect(screen.getByText(/also Red light/)).toBeInTheDocument();
+    expect(screen.getByText(/No `task` column/)).toBeInTheDocument();
     expect(screen.getByText(`Developed by ${DEVELOPER} · AutoTrack AI`)).toBeInTheDocument();
+  });
+
+  it('shows the course tasks when a data source provides them', () => {
+    renderPanel([
+      createDataFrame({
+        fields: [
+          { name: 't_s', type: FieldType.number, values: [0, 1] },
+          { name: 'state', type: FieldType.string, values: ['DRIVE', 'STOP'] },
+          { name: 'task', type: FieldType.string, values: ['traffic_light', 'traffic_light'] },
+          { name: 'tasks_done', type: FieldType.string, values: ['lane_following;traffic_sign', null] },
+        ],
+      }),
+    ]);
+    expect(screen.getByText(/2 \/ 8 done/)).toBeInTheDocument();
   });
 
   it('says which column is missing instead of showing empty values', () => {
@@ -58,6 +73,6 @@ describe('DebugPanel', () => {
       }),
     ]);
     expect(screen.getByText(/No `state` column/)).toBeInTheDocument();
-    expect(screen.getByText(/No `detection_class` column/)).toBeInTheDocument();
+    expect(screen.getByText(/No `detections` column/)).toBeInTheDocument();
   });
 });

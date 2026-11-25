@@ -1,6 +1,6 @@
 import { test, expect } from '@grafana/plugin-e2e';
 
-// Panel 1 shows the generated sample run (provisioning/data/sample_run.csv), panel 2 has no data.
+// Panel 1 shows the real stop-sign clip (provisioning/data/04_dur_levhasi.csv), panel 2 has no data.
 
 test('should display "No data" in case panel data is empty', async ({
   gotoPanelEditPage,
@@ -11,7 +11,7 @@ test('should display "No data" in case panel data is empty', async ({
   await expect(panelEditPage.panel.locator).toContainText('No data');
 });
 
-test('should show state, tasks, detection and the developer for the sample run', async ({
+test('should show state, reason, detection and the developer for the stop-sign clip', async ({
   gotoPanelEditPage,
   readProvisionedDashboard,
   page,
@@ -19,10 +19,9 @@ test('should show state, tasks, detection and the developer for the sample run',
   const dashboard = await readProvisionedDashboard({ fileName: 'dashboard.json' });
   await gotoPanelEditPage({ dashboard, id: '1' });
   const panel = page.getByTestId('debug-panel');
-  await expect(panel.getByTestId('debug-state')).toContainText('FINISHED');
-  await expect(panel.getByTestId('debug-tasks')).toContainText('8 / 8 done');
-  await expect(panel.getByTestId('debug-detection')).toContainText('Pedestrian');
-  await expect(panel.getByTestId('debug-alerts')).toContainText('Lane lost');
+  await expect(panel.getByTestId('debug-state')).toContainText('DRIVE');
+  await expect(panel.getByTestId('debug-detection')).toContainText('Stop sign');
+  await expect(panel.getByTestId('debug-timeline')).toContainText('dur levhasi');
   await expect(panel).toContainText('Developed by Meryem Betül Abdulrahman');
 });
 

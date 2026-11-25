@@ -1,5 +1,5 @@
 import { DataFrame, Field, FieldType } from '@grafana/data';
-import { ALIASES, COLUMNS, ColumnId } from './columns';
+import { ALIASES, ColumnId, TIME_COLUMNS } from './columns';
 
 /** One value of a column at one moment. `v` is null when the cell was empty ("no data"). */
 export interface Sample<T> {
@@ -27,12 +27,29 @@ function matches(field: Field, frame: DataFrame, column: ColumnId): boolean {
   return namesOf(field, frame).some((name) => wanted.includes(name));
 }
 
-/** The time axis of a frame: the `time_ms` column if there is one, else the first time field. */
-function timeField(frame: DataFrame): Field | undefined {
-  return (
-    frame.fields.find((f) => normalise(f.name) === normalise(COLUMNS.time)) ??
-    frame.fields.find((f) => f.type === FieldType.time)
-  );
+interface TimeAxis {
+  field: Field;
+  toMs: number;
+}
+
+/**
+ * The time axis of a frame, in milliseconds: `t_s` (seconds, as telemetry_node writes it) or `time_ms`
+ * if there is one, else the first time field (epoch ms, as the AutoTrack data source sends it).
+ */
+function timeAxis(frame: DataFrame): TimeAxis | undefined {
+  for (const { name, toMs } of TIME_COLUMNS) {
+    const field = frame.fields.find((f) => normalise(f.name) === normalise(name));
+    if (field) {
+      return { field, toMs };
+    }
+  }
+  const field = frame.fields.find((f) => f.type === FieldType.time);
+  return field ? { field, toMs: 1 } : undefined;
+}
+
+function timeAt(axis: TimeAxis, i: number): number {
+  // Rounded so that 730.1 s becomes 730100 ms exactly, and samples of two columns can be matched by time.
+  return Math.round(Number(axis.field.values[i]) * axis.toMs);
 }
 
 function clean(value: unknown): number | string | null {
@@ -53,14 +70,14 @@ function clean(value: unknown): number | string | null {
  */
 export function readColumn(series: DataFrame[], column: ColumnId): Array<Sample<number | string>> | undefined {
   for (const frame of series) {
-    const field = frame.fields.find((f) => f !== timeField(frame) && matches(f, frame, column));
-    const time = timeField(frame);
+    const time = timeAxis(frame);
+    const field = frame.fields.find((f) => f !== time?.field && matches(f, frame, column));
     if (!field || !time) {
       continue;
     }
     const samples: Array<Sample<number | string>> = [];
     for (let i = 0; i < frame.length; i++) {
-      const t = Number(time.values[i]);
+      const t = timeAt(time, i);
       if (Number.isFinite(t)) {
         samples.push({ t, v: clean(field.values[i]) });
       }
@@ -107,13 +124,13 @@ export interface AlertRow {
 
 /**
  * Alerts sent by the data source as their own frame with `level` and `message` fields
- * (docs/data-format.md, section 5). Returns undefined when no such frame exists.
+ * (docs/data-format.md). Returns undefined when no such frame exists.
  */
 export function readAlerts(series: DataFrame[]): AlertRow[] | undefined {
   for (const frame of series) {
     const level = frame.fields.find((f) => normalise(f.name) === 'level');
     const message = frame.fields.find((f) => normalise(f.name) === 'message');
-    const time = timeField(frame);
+    const time = timeAxis(frame);
     if (!level || !message || !time) {
       continue;
     }
@@ -121,7 +138,7 @@ export function readAlerts(series: DataFrame[]): AlertRow[] | undefined {
     for (let i = 0; i < frame.length; i++) {
       const msg = clean(message.values[i]);
       if (msg !== null) {
-        rows.push({ t: Number(time.values[i]), level: String(clean(level.values[i]) ?? 'info'), message: String(msg) });
+        rows.push({ t: timeAt(time, i), level: String(clean(level.values[i]) ?? 'info'), message: String(msg) });
       }
     }
     return rows.sort((a, b) => a.t - b.t);

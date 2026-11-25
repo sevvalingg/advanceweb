@@ -1,42 +1,70 @@
 import { FieldType, createDataFrame } from '@grafana/data';
-import { buildDebugState, formatTime, parseTaskList, stateSegments, taskProgress } from './debugState';
+import {
+  buildDebugState,
+  formatTime,
+  parseDetections,
+  parseReasons,
+  parseTaskList,
+  stateSegments,
+  taskProgress,
+} from './debugState';
 import { readColumn } from './readFrames';
 
-// One frame in the shared CSV format, as Grafana's TestData "CSV content" produces it.
-const csvFrame = createDataFrame({
+// Rows in telemetry_node's format, as Grafana's TestData "CSV content" turns them into a frame.
+const run = createDataFrame({
   fields: [
-    { name: 'time_ms', type: FieldType.number, values: [0, 100, 200, 300, 400] },
-    { name: 'state', type: FieldType.string, values: ['IDLE', 'FOLLOW_LANE', 'FOLLOW_LANE', null, 'STOP_SIGN'] },
+    { name: 't_s', type: FieldType.number, values: [745.0, 745.1, 745.2, 745.3, 745.4] },
+    { name: 'state', type: FieldType.string, values: ['DRIVE', 'DRIVE', null, 'STOP', 'STOP'] },
     {
-      name: 'task',
+      name: 'reasons',
       type: FieldType.string,
-      values: ['lane_following', 'lane_following', 'traffic_sign', 'traffic_sign', 'traffic_sign'],
+      values: ['yol acik', 'yol acik', 'yol acik', 'dur levhasi', 'dur levhasi; serit kayip (0.9 sn)'],
     },
-    {
-      name: 'tasks_done',
-      type: FieldType.string,
-      values: [null, null, 'lane_following', 'lane_following', 'lane_following'],
-    },
-    { name: 'perception_fps', type: FieldType.number, values: [16, 15.5, 12, 15.8, 16.1] },
-    { name: 'perception_latency_ms', type: FieldType.number, values: [48, 50, 120, 52, 49] },
-    { name: 'detection_class', type: FieldType.string, values: [null, null, 'sign_stop', '', null] },
-    { name: 'detection_conf', type: FieldType.number, values: [null, null, 0.87, null, null] },
+    { name: 'detections', type: FieldType.string, values: [null, 'sign_stop:0.62', 'sign_stop:0.95', null, null] },
+    { name: 'camera_fps', type: FieldType.number, values: [null, null, null, null, null] },
+    { name: 'detections_fps', type: FieldType.number, values: [15, 14, 9, 15, 14] },
+    { name: 'detection_latency_ms', type: FieldType.number, values: [86.3, 87.4, 140.2, 90.1, 88.8] },
   ],
 });
 
-describe('stateSegments', () => {
-  it('joins consecutive equal states and lets empty cells continue the current state', () => {
-    const segments = stateSegments([
-      { t: 0, v: 'IDLE' },
-      { t: 100, v: 'FOLLOW_LANE' },
-      { t: 200, v: 'FOLLOW_LANE' },
-      { t: 300, v: null },
-      { t: 400, v: 'STOP_SIGN' },
+describe('parsing cells', () => {
+  it('splits reasons at ";"', () => {
+    expect(parseReasons('engel yaklasiyor; serit kayip (0.9 sn)')).toEqual([
+      'engel yaklasiyor',
+      'serit kayip (0.9 sn)',
     ]);
+    expect(parseReasons('')).toEqual([]);
+  });
+
+  it('reads several detections, most confident first, separated by spaces or ";"', () => {
+    const expected = [
+      { cls: 'light_red', conf: 0.9 },
+      { cls: 'sign_stop', conf: 0.62 },
+    ];
+    expect(parseDetections('sign_stop:0.62 light_red:0.9')).toEqual(expected);
+    expect(parseDetections('sign_stop:0.62;light_red:0.9')).toEqual(expected);
+    expect(parseDetections('pedestrian')).toEqual([{ cls: 'pedestrian', conf: null }]);
+    expect(parseDetections(null)).toEqual([]);
+  });
+});
+
+describe('stateSegments', () => {
+  it('joins equal states, lets empty cells continue a state and keeps the reasons of its first row', () => {
+    const segments = stateSegments(
+      [
+        { t: 0, v: 'DRIVE' },
+        { t: 100, v: null },
+        { t: 200, v: 'STOP' },
+      ],
+      [
+        { t: 0, v: 'yol acik' },
+        { t: 100, v: 'yol acik' },
+        { t: 200, v: 'dur levhasi' },
+      ]
+    );
     expect(segments).toEqual([
-      { state: 'IDLE', start: 0, end: 100 },
-      { state: 'FOLLOW_LANE', start: 100, end: 400 },
-      { state: 'STOP_SIGN', start: 400, end: 400 },
+      { state: 'DRIVE', start: 0, end: 200, reasons: ['yol acik'] },
+      { state: 'STOP', start: 200, end: 200, reasons: ['dur levhasi'] },
     ]);
   });
 });
@@ -44,7 +72,6 @@ describe('stateSegments', () => {
 describe('tasks', () => {
   it('ignores unknown and empty parts of tasks_done', () => {
     expect(parseTaskList('lane_following; ;flying;parking')).toEqual(['lane_following', 'parking']);
-    expect(parseTaskList(null)).toEqual([]);
   });
 
   it('marks done, current and pending tasks in course order', () => {
@@ -55,43 +82,54 @@ describe('tasks', () => {
 });
 
 describe('buildDebugState', () => {
-  const view = buildDebugState([csvFrame]);
+  const view = buildDebugState([run]);
 
-  it('reads the current state and how long it lasted', () => {
-    expect(view.state.current?.state).toBe('STOP_SIGN');
-    expect(view.state.segments.map((s) => s.state)).toEqual(['IDLE', 'FOLLOW_LANE', 'STOP_SIGN']);
+  it('reads t_s in seconds as milliseconds since the start of the run', () => {
+    expect(view.now).toBe(745400);
   });
 
-  it('reads task progress from the last row', () => {
-    expect(view.tasks.current).toBe('traffic_sign');
-    expect(view.tasks.doneCount).toBe(1);
+  it('reads the current state, how long it lasted and why', () => {
+    expect(view.state.current).toEqual({ state: 'STOP', start: 745300, end: 745400, reasons: ['dur levhasi'] });
+    expect(view.reasons.current).toEqual(['dur levhasi', 'serit kayip (0.9 sn)']);
   });
 
-  it('keeps the last detection, its confidence and the time since it', () => {
-    expect(view.detection.last).toEqual({ cls: 'sign_stop', conf: 0.87, distance: null, t: 200 });
-    expect(view.now).toBe(400);
+  it('keeps the last detection with its confidence and time', () => {
+    expect(view.detection.last).toEqual({
+      cls: 'sign_stop',
+      conf: 0.95,
+      t: 745200,
+      all: [{ cls: 'sign_stop', conf: 0.95 }],
+    });
   });
 
-  it('reports a missing column instead of inventing a value', () => {
-    expect(view.cameraFps).toEqual({ present: false, value: null });
-    expect(view.perceptionFps).toEqual({ present: true, value: 16.1 });
+  it('reads detection FPS and latency, and an empty camera column as present but without a value', () => {
+    expect(view.detectionsFps).toEqual({ present: true, value: 14 });
+    expect(view.latencyMs).toEqual({ present: true, value: 88.8 });
+    expect(view.cameraFps).toEqual({ present: true, value: null });
+  });
+
+  it('reports columns that telemetry_node does not write as missing', () => {
+    expect(view.tasks.present).toBe(false);
     expect(view.alerts).toBeUndefined();
   });
 
   it('reads the alerts frame sent by the data source', () => {
     const alerts = createDataFrame({
       fields: [
-        { name: 'time_ms', type: FieldType.number, values: [100, 300] },
+        { name: 't_s', type: FieldType.number, values: [745.1, 745.3] },
         { name: 'level', type: FieldType.string, values: ['warning', 'critical'] },
-        { name: 'message', type: FieldType.string, values: ['Lane lost', 'Connection lost'] },
+        { name: 'message', type: FieldType.string, values: ['Lane lost', 'Low battery'] },
       ],
     });
-    expect(buildDebugState([csvFrame, alerts]).alerts?.map((a) => a.message)).toEqual(['Lane lost', 'Connection lost']);
+    expect(buildDebugState([run, alerts]).alerts).toEqual([
+      { t: 745100, level: 'warning', message: 'Lane lost' },
+      { t: 745300, level: 'critical', message: 'Low battery' },
+    ]);
   });
 });
 
 describe('readColumn', () => {
-  it('finds a field by the readable label the current data source uses', () => {
+  it('finds a field by the readable label the current data source uses, with epoch-ms time', () => {
     const frame = createDataFrame({
       name: 'Camera frames per second',
       fields: [
@@ -105,14 +143,14 @@ describe('readColumn', () => {
     ]);
   });
 
-  it('keeps 0 as a value and turns empty cells into null', () => {
+  it('accepts the column names of the first format draft', () => {
     const frame = createDataFrame({
       fields: [
         { name: 'time_ms', type: FieldType.number, values: [0, 100] },
-        { name: 'camera_fps', type: FieldType.number, values: [0, null] },
+        { name: 'perception_fps', type: FieldType.number, values: [0, null] },
       ],
     });
-    expect(readColumn([frame], 'camera_fps')).toEqual([
+    expect(readColumn([frame], 'detections_fps')).toEqual([
       { t: 0, v: 0 },
       { t: 100, v: null },
     ]);
@@ -122,6 +160,6 @@ describe('readColumn', () => {
 describe('formatTime', () => {
   it('shows run time as mm:ss.s', () => {
     expect(formatTime(0)).toBe('00:00.0');
-    expect(formatTime(75300)).toBe('01:15.3');
+    expect(formatTime(745300)).toBe('12:25.3');
   });
 });

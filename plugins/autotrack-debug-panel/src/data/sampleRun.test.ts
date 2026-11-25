@@ -3,17 +3,16 @@ import { join } from 'path';
 import { FieldType, createDataFrame } from '@grafana/data';
 import { buildDebugState } from './debugState';
 
-// Reads the generated sample run the same way TestData "CSV content" would: numbers where every
-// non-empty cell is a number, text otherwise, empty cells as null.
+// Reads the real track clips the same way TestData "CSV content" does: numbers where every non-empty
+// cell is a number, text otherwise, empty cells as null.
 function csvToFrame(file: string) {
   const [header, ...lines] = readFileSync(join(__dirname, '../../provisioning/data', file), 'utf8')
     .trim()
-    .split('\n');
-  const names = header.split(',');
+    .split(/\r?\n/);
   const rows = lines.map((line) => line.split(','));
   return createDataFrame({
-    fields: names.map((name, i) => {
-      const cells = rows.map((r) => (r[i] === '' ? null : r[i]));
+    fields: header.split(',').map((name, i) => {
+      const cells = rows.map((r) => (r[i] === '' || r[i] === undefined ? null : r[i]));
       const numeric = cells.every((c) => c === null || !Number.isNaN(Number(c)));
       return {
         name,
@@ -24,34 +23,19 @@ function csvToFrame(file: string) {
   });
 }
 
-describe('sample run (provisioning/data)', () => {
-  const view = buildDebugState([csvToFrame('sample_run.csv'), csvToFrame('sample_alerts.csv')]);
-
-  it('goes through all 8 course tasks and ends finished', () => {
-    expect(view.tasks.doneCount).toBe(8);
-    expect(view.state.current?.state).toBe('FINISHED');
+describe('real track clips from 23 November (provisioning/data)', () => {
+  it('stop sign: detects sign_stop and stops because of it', () => {
+    const view = buildDebugState([csvToFrame('04_dur_levhasi.csv')]);
+    const stops = view.state.segments.filter((s) => s.state === 'STOP');
+    expect(stops.some((s) => s.reasons.includes('dur levhasi'))).toBe(true);
+    expect(view.detection.last?.cls).toBe('sign_stop');
+    expect(view.detectionsFps.present).toBe(true);
   });
 
-  it('has the expected sequence of states', () => {
-    expect(view.state.segments.map((s) => s.state)).toEqual([
-      'IDLE',
-      'FOLLOW_LANE',
-      'STOP_SIGN',
-      'FOLLOW_LANE',
-      'WAIT_LIGHT',
-      'FOLLOW_LANE',
-      'YIELD_PEDESTRIAN',
-      'FOLLOW_LANE',
-      'AVOID_OBSTACLE',
-      'OVERTAKE',
-      'ROAD_WORKS',
-      'PARK',
-      'FINISHED',
-    ]);
-  });
-
-  it('has a last detection and the lane-lost alert', () => {
-    expect(view.detection.last?.cls).toBe('pedestrian');
-    expect(view.alerts).toEqual([{ t: 43500, level: 'warning', message: 'Lane lost for 0.5 s' }]);
+  it('lane loss in a curve: slows down, then stops with "serit kayip"', () => {
+    const view = buildDebugState([csvToFrame('02_viraj_serit_kaybi.csv')]);
+    const states = view.state.segments.map((s) => s.state);
+    expect(states).toContain('SLOW_DOWN');
+    expect(view.state.segments.some((s) => s.reasons.some((r) => r.startsWith('serit kayip')))).toBe(true);
   });
 });
