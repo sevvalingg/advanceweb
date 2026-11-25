@@ -1,151 +1,117 @@
 # AutoTrack telemetry CSV format
 
-> **Status: DRAFT for team review.** Proposed by Meryem Betül for the three plugins. Nothing here is final
-> until Esma (data source), Şevval (lane panel) and Meryem Betül (debug panel) agree. Open questions are at
-> the end.
->
-> The decision columns (state machine, tasks) come from the AutoTrack decision engine, which Meryem Nur
-> builds in the AutoTrack AI team. She is not part of this project; we only use her data.
-
-One format that **every plugin reads**, whether the data comes from a recorded CSV, the replay server or,
-later, the car itself. The column names follow the ROS 2 topics that AutoTrack AI publishes or will publish,
-so a converted rosbag and a hand-made test CSV look the same to Grafana.
+> **Status: DRAFT for team review.** This version replaces the first draft. Instead of inventing new
+> column names, it adopts the columns that AutoTrack's `telemetry_node` already writes on the Jetson, as
+> Esma proposed, so a run recorded on the track is read by every plugin without converting it.
+> Real examples: `mock-server/data/23kasim/` (PR #4). Open questions are at the end.
 
 ## 1. File layout
 
-- One run = one CSV file, UTF-8, comma separated, first line is the header.
-- **One row every 100 ms (10 Hz).** `time_ms` is the time since the start of the run: `0, 100, 200, ...`
-- **An empty cell means "no data"**, never `0`. A missing LiDAR reading and a LiDAR reading of 0 m are
-  different things, and the panels must be able to tell them apart.
-- Booleans are `0` / `1`. Text values (states, classes) are written without quotes and without commas.
-- Not every run has every column. A plugin must ignore columns it does not know and treat a missing column
-  like an empty one. This is what lets today's manual-drive recording and tomorrow's autonomous run use the
-  same format.
-- File names: `<yyyy-mm-dd>_<hhmm>_<description>.csv`, for example `2026-10-20_1735_manual.csv`.
-  Test files: `test_normal_drive.csv`, `test_lane_loss.csv`, `test_steering_oscillation.csv`, `test_low_battery.csv`.
+- One run = one CSV file (`run_*.csv` on the Jetson), UTF-8, comma separated, first line is the header.
+- **One row every 100 ms (10 Hz).** The sources are faster or about the same (lane ~15 Hz, detections
+  ~11 Hz, LiDAR 10 Hz, VESC 50 Hz), so 10 Hz is enough for the dashboards.
+- **An empty cell means "no data"**, never `0`. A missing LiDAR reading and a reading of 0 m are different.
+- Text values (`state`, `reasons`, `detections`) contain no commas.
+- Not every run has every column. A plugin ignores columns it does not know and treats a missing column
+  like an empty one.
 
-## 2. Sign conventions
+## 2. Columns written by telemetry_node
 
-All angles and offsets follow ROS REP 103 (x forward, y left, counter-clockwise positive):
-
-- **positive = left.** `steering_deg = 10` steers left; `lateral_error_m = 0.05` means the car is 5 cm
-  **left** of the lane centre; `heading_error_deg = 3` means the car points 3° left of the lane direction.
-- Distances are in metres, speeds in m/s, times in milliseconds.
-
-## 3. Columns
-
-**Unit** is the Grafana unit id the data source attaches to the field, so panels show it correctly.
-**Now** says whether the current recording (20 October, manual drive) already has the value.
-
-### Time
-
-| Column | Type | Unit | Description | Now |
+| # | Column | Unit | Source topic | Notes |
 |---|---|---|---|---|
-| `time_ms` | int | `ms` | Time since the start of the run. Required, strictly increasing. | ✅ |
+| 1 | `t_s` | s | – | Time since the start of the run |
+| 2 | `state` | – | `/autotrack/state` | `STOP`, `DRIVE`, `SLOW_DOWN`, `MANUAL_OVERRIDE` |
+| 3 | `reasons` | – | `/autotrack/reasons` | Why the decision node is in this state, Turkish, several separated by `;` (e.g. `engel yaklasiyor; serit kayip (0.9 sn)`) |
+| 4 | `manual` | 0/1 | `/joy` | 1 while LB is held |
+| 5 | `speed_cmd` | m/s | `/drive_raw` | Speed requested by the decision node |
+| 6 | `steering_cmd` | rad | `/drive_raw` | **+ = left** |
+| 7 | `speed_out` | m/s | `/drive` | After the speed limiter and curve slow-down. **Use this for speed charts** |
+| 8 | `lateral_error_m` | m | `/lane_error` x | **+ = lane centre is to the RIGHT of the car** (see section 3) |
+| 9 | `heading_error_rad` | rad | `/lane_error` y | |
+| 10 | `line_count` | 0/1/2 | `/lane_error` z | Lane lines seen; 0 = lane lost |
+| 11 | `obstacle_m` | m | `/autotrack/obstacle` x | Nearest obstacle ahead, from the LiDAR |
+| 12 | `obstacle_valid` | 0/1 | `/autotrack/obstacle` y | |
+| 13 | `detections` | – | `/autotrack/detections` | `class:confidence`, several separated by a space (e.g. `sign_stop:0.95`); see question 1 |
+| 14 | `odom_speed_mps` | m/s | `/odom` | **Not reliable**: the VESC reports a constant 0.864 at 0.2–0.3 m/s and 0 at 0.15 m/s. Only "is the motor turning" |
+| 15 | `camera_fps` | Hz | camera | Empty when the camera is not recorded |
+| 16 | `lane_fps` | Hz | `/lane_error` | Messages in the last 1 s |
+| 17 | `detections_fps` | Hz | `/autotrack/detections` | Messages in the last 1 s (NFR-02 target: 15) |
+| 18 | `detection_latency_ms` | ms | `/autotrack/detections` | Camera frame to detection result |
 
-### Driving and vehicle (Esma, WP1)
+Detection classes, same names and order as `configs/classes.txt` in the AutoTrack repository:
+`sign_stop`, `sign_pedestrian_crossing`, `sign_speed_limit`, `light_red`, `light_yellow`, `light_green`,
+`pedestrian`.
 
-| Column | Type | Unit | ROS source | Description | Now |
-|---|---|---|---|---|---|
-| `speed_mps` | float | `velocityms` | `/odom` twist.linear.x | Measured speed | ⚪ |
-| `speed_cmd_mps` | float | `velocityms` | `/drive` (or `/joy` in manual mode) | Commanded speed, limited to 1 m/s (NFR-04) | ✅ |
-| `steering_deg` | float | `degree` | `/drive` steering_angle | Commanded steering angle, + = left | ✅ |
-| `manual_active` | 0/1 | `bool` | `/joy` deadman button | 1 while the driver holds the deadman button (FR-03) | ✅ |
-| `battery_motor_v` | float | `volt` | `/sensors/core` voltage_input | 3S motor pack, measured by the VESC | ⚪ |
-| `battery_jetson_v` | float | `volt` | (no sensor yet) | 4S Jetson pack. Optional until it can be measured | ❌ |
+Things to know when reading a run:
 
-### Sensors (Esma)
+- `state = DRIVE` does not always mean the car is moving: when RB is released the car stops, but the
+  decision node may stay in DRIVE and keep computing a steering angle. Use `speed_out` and `manual` too.
+- Runs made from a rosbag (like `23kasim/`) use the bag's receive time; `telemetry_node` uses its own
+  clock. If a node was restarted during the run there can be gaps of a few seconds.
 
-| Column | Type | Unit | ROS source | Description | Now |
-|---|---|---|---|---|---|
-| `lidar_hz` | float | `hertz` | `/scan` message rate | LiDAR scans per second | ✅ |
-| `camera_fps` | float | `fps` | ZED image message rate | Camera frames per second | ✅ |
-| `obstacle_front_m` | float | `lengthm` | `/scan`, front sector | Nearest obstacle ahead; empty if nothing in range | ✅ |
+## 3. Sign conventions
 
-### Lane (Şevval, WP2)
+`steering_cmd` follows ROS REP 103 (+ = left), but `lateral_error_m` is + = lane centre to the **right**.
+The CSV keeps the values exactly as `telemetry_node` writes them. The **data source** converts when it
+serves them, so every panel sees one rule, **+ = left**:
 
-| Column | Type | Unit | ROS source | Description | Now |
-|---|---|---|---|---|---|
-| `lane_detected` | 0/1 | `bool` | lane detection node | 1 when the lane is found in this frame | ❌ |
-| `lateral_error_m` | float | `lengthm` | lane detection node | Car position relative to the lane centre, + = left | ❌ |
-| `heading_error_deg` | float | `degree` | lane detection node | Car direction relative to the lane direction, + = left | ❌ |
-| `lane_left_m` | float | `lengthm` | lane detection node | Distance from the car centre to the left boundary | ❌ |
-| `lane_right_m` | float | `lengthm` | lane detection node | Distance from the car centre to the right boundary | ❌ |
-
-`lane_left_m` and `lane_right_m` are what the top-down view needs. When `lane_detected = 0`, the four lane
-values are left empty.
-
-### Perception (Meryem Betül, WP3 and WP6)
-
-| Column | Type | Unit | ROS source | Description | Now |
-|---|---|---|---|---|---|
-| `detection_class` | text | – | YOLOv8n detection node | Most relevant detection in this frame, one of the classes below; empty if none | ❌ |
-| `detection_conf` | float | `percentunit` | same | Confidence 0–1 | ❌ |
-| `detection_distance_m` | float | `lengthm` | same (ZED depth) | Distance to the detected object. Optional | ❌ |
-| `perception_fps` | float | `fps` | detection node | Frames processed per second by the model (NFR-02: ≥ 15) | ❌ |
-| `perception_latency_ms` | float | `ms` | detection node | Camera frame time to detection result | ❌ |
-
-Detection classes, same names and order as `configs/classes.txt` in the AutoTrack repo:
-`sign_stop`, `sign_pedestrian_crossing`, `sign_speed_limit`, `light_red`, `light_yellow`, `light_green`, `pedestrian`.
-
-### Decision (AutoTrack decision engine, WP4)
-
-| Column | Type | Unit | ROS source | Description | Now |
-|---|---|---|---|---|---|
-| `state` | text | – | decision engine | Current state of the state machine | ❌ |
-| `task` | text | – | decision engine | Course task the car is working on now | ❌ |
-| `tasks_done` | text | – | decision engine | Finished tasks, separated by `;` (e.g. `lane_following;traffic_sign`) | ❌ |
-
-Proposed states (to be confirmed with Meryem Nur, who builds the decision engine in AutoTrack AI):
-`IDLE`, `MANUAL`, `FOLLOW_LANE`, `STOP_SIGN`, `WAIT_LIGHT`, `YIELD_PEDESTRIAN`, `AVOID_OBSTACLE`,
-`OVERTAKE`, `ROAD_WORKS`, `PARK`, `FINISHED`.
-
-The 8 course tasks:
-`lane_following`, `traffic_sign`, `traffic_light`, `pedestrian`, `obstacle`, `overtaking`, `parking`, `road_works`.
-
-## 4. Example
-
-```csv
-time_ms,speed_mps,speed_cmd_mps,steering_deg,manual_active,battery_motor_v,lidar_hz,camera_fps,obstacle_front_m,lane_detected,lateral_error_m,heading_error_deg,lane_left_m,lane_right_m,detection_class,detection_conf,perception_fps,perception_latency_ms,state,task,tasks_done
-0,0.00,0.00,0.0,0,12.42,10.0,15.0,,1,0.01,0.5,0.21,0.19,,,16.2,48,IDLE,lane_following,
-100,0.12,0.30,1.5,0,12.41,10.0,15.0,,1,0.02,0.8,0.20,0.20,,,16.0,51,FOLLOW_LANE,lane_following,
-200,0.25,0.30,-2.0,0,12.38,10.0,14.9,1.84,1,-0.01,-0.4,0.22,0.18,sign_stop,0.87,15.8,53,FOLLOW_LANE,traffic_sign,lane_following
-300,0.18,0.10,0.0,0,12.39,10.1,15.0,1.62,0,,,,,sign_stop,0.91,15.9,50,STOP_SIGN,traffic_sign,lane_following
-```
-
-Row 300 shows a frame where the lane is lost: `lane_detected = 0` and the lane values are empty, not 0.
-
-## 5. Alerts (computed by the data source, not stored in the CSV)
-
-The data source derives alerts from the columns above and sends them to the panels as a separate
-`alerts` frame (time, level, message), and as Grafana annotations:
-
-| Alert | Rule (proposal) | Level |
+| Column in the CSV | Served by the data source as | Conversion |
 |---|---|---|
-| Low motor battery | `battery_motor_v` < 10.5 V (3.5 V per cell) for 2 s | warning; critical below 10.2 V |
-| Low Jetson battery | `battery_jetson_v` < 14.0 V for 2 s | warning |
-| Connection lost | live: no new data for 1 s; replay: gap in `time_ms` > 500 ms | critical |
-| Lane lost | `lane_detected = 0` for 0.5 s | warning |
-| Sensor stall | `lidar_hz` or `camera_fps` = 0 (existing AI sensor health analysis) | warning |
+| `lateral_error_m` (+ = centre right) | car offset from the lane centre, + = car left of centre | sign flipped |
+| `steering_cmd` (rad) | degrees, + = left | × 180 / π (already in PR #4) |
 
-## 6. How the existing pieces map to this format
+A panel that reads the CSV directly (Grafana TestData "CSV content") gets the raw values and must apply
+the same conversion.
 
-- **`bag_to_json.py`** already extracts `speed_cmd`, `steering_cmd`, `manual_active`, `obstacle_front`,
-  `lidar_hz` and `camera_fps`. A CSV writer that resamples them to 10 Hz gives the first real CSV
-  (columns marked ✅). New topics are added to the converter as the car starts publishing them.
-- **Data source:** each column becomes a topic with the column name as id and the unit from the tables.
-  Text columns (`state`, `task`, `detection_class`) become string fields, which Grafana's state timeline
-  can show directly.
-- **Replay at 1x / 2x / 4x:** the server advances `time_ms` 1, 2 or 4 times faster than the wall clock;
-  the file itself does not change.
+## 4. Battery (not in telemetry_node yet)
 
-## 7. Open questions
+| Column | Unit | Source topic | Notes |
+|---|---|---|---|
+| `battery_drive_v` | V | `/sensors/core` `state.voltage_input` | 3S motor pack (11.1 V nominal), measured by the VESC at 50 Hz. Same value as "Sürüş aküsü" in the Driver Station |
 
-1. **To ask Meryem Nur (AutoTrack decision engine):** are these the right states? Does the decision
-   engine know which tasks are finished, or should the debug panel work it out from the state changes?
-2. **Şevval:** can lane detection give `lane_left_m` / `lane_right_m`, or only the lateral and heading error?
-3. **Esma:** is 10 Hz enough for the panels? LiDAR runs at 10 Hz and the camera at 15 FPS, so a faster rate
-   would only repeat values.
-4. **Esma:** can the 4S Jetson battery be measured at all, or do we drop `battery_jetson_v`?
-5. **All:** one wide CSV (this draft) or a second file for events (detections, state changes)? The wide file
-   is simpler for replay; a separate events file would keep every detection when there are several per frame.
+The 4S Jetson pack cannot be measured: its level is only on the power box's LCD, no data reaches the Jetson.
+
+## 5. Columns the panels could use later (proposal)
+
+These are not written by any node today. The panels show "no `task` column" until they exist.
+
+| Column | Type | Description |
+|---|---|---|
+| `task` | text | Course task the car is working on: `lane_following`, `traffic_sign`, `traffic_light`, `pedestrian`, `obstacle`, `overtaking`, `parking`, `road_works` |
+| `tasks_done` | text | Finished tasks, separated by `;` |
+
+## 6. Alerts (computed by the data source, not stored in the CSV)
+
+The data source derives alerts from the columns and sends them to the panels as a separate frame with
+`t_s`, `level` and `message`, and as Grafana annotations. State changes and detections are found the same
+way, by comparing a row with the one before it.
+
+| Alert | Rule | Level |
+|---|---|---|
+| Low drive battery | `battery_drive_v` < 10.5 V (3.5 V per cell) for 2 s | warning; critical below 10.2 V |
+| Connection lost | live: no new row for 1 s; replay: gap in `t_s` > 0.5 s | critical |
+| Lane lost | `line_count` = 0 for 0.5 s | warning |
+| Detector too slow | `detections_fps` < 15 for 2 s (NFR-02) | warning |
+| Sensor stall | `lidar_hz` or `camera_fps` = 0 (existing AI sensor health analysis, JSON runs only) | warning |
+
+## 7. How the plugins read the format
+
+- **Data source** (Esma): reads a CSV run with `mock-server/telemetry_csv.ts` (PR #4) and serves the
+  numeric columns as topics. Text columns (`state`, `reasons`, `detections`) also need to be served as
+  string fields for the debug panel; see question 2.
+- **Lane panel** (Şevval): `speed_out`, `steering_cmd`, `lateral_error_m`, `heading_error_rad`, `line_count`.
+- **Debug panel** (Meryem Betül): `state`, `reasons`, `detections`, `detections_fps`,
+  `detection_latency_ms`, `camera_fps`, and `task` / `tasks_done` when they exist. It also reads the CSV
+  directly through TestData, so it works before the data source serves text columns.
+
+## 8. Open questions
+
+1. **Esma:** in `detections`, are several objects separated by a space (as in the `23kasim` README) or by
+   `;` (as in your message)? The recording never has more than one detection per row, so the data does not
+   show it. The debug panel accepts both for now.
+2. **Esma:** can the data source serve `state`, `reasons` and `detections` as string fields, next to
+   `state_code`?
+3. **Esma / Şevval:** do we agree that the data source flips `lateral_error_m`, and that a panel reading
+   the CSV directly flips it itself?
+4. **To ask Meryem Nur (AutoTrack decision engine):** could the decision node publish the current course
+   task, so `task` and `tasks_done` can be written? Until then the debug panel cannot show task progress.
